@@ -1,0 +1,79 @@
+# Publish fmeca-mcp to crates.io when a `v*` tag is pushed.
+#
+# This is a 2-crate workspace: the lib `fmeca` must be published BEFORE the
+# bin `fmeca-mcp` (which depends on it by version). crates.io needs a short
+# moment to index the core before the dependent resolves, so the mcp publish
+# retries.
+#
+# Required repository secret:
+#   CRATES_IO_TOKEN — a crates.io API token with publish scope. Generate at
+#   https://crates.io/me, add at Settings → Secrets and variables → Actions.
+#
+# Usage:
+#   git tag v0.0.1
+#   git push origin v0.0.1
+#
+# Fails fast if the tag does not match the workspace version, and runs the test
+# suite before anything reaches crates.io.
+
+name: Publish to crates.io
+
+on:
+    push:
+        tags:
+            - 'v*'
+
+env:
+    CARGO_TERM_COLOR: always
+
+jobs:
+    publish:
+        name: cargo publish (tag-triggered)
+        runs-on: ubuntu-latest
+        timeout-minutes: 25
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+
+            - name: Cache cargo registry + build
+              uses: Swatinem/rust-cache@v2
+
+            - name: Verify tag matches workspace version
+              run: |
+                  tag="${GITHUB_REF#refs/tags/v}"
+                  ver=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+                  if [ "$tag" != "$ver" ]; then
+                    echo "::error::Tag v$tag does not match workspace version $ver"
+                    exit 1
+                  fi
+                  echo "Tag v$tag matches workspace version $ver — OK."
+
+            - name: cargo test (final safety net)
+              run: cargo test --workspace
+
+            - name: Publish core then mcp (workspace order)
+              env:
+                  TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+              run: |
+                  set -uo pipefail
+                  pub() {
+                    local crate="$1"
+                    if cargo publish -p "$crate" --token "$TOKEN" 2>err.log; then
+                      cat err.log; return 0
+                    fi
+                    cat err.log
+                    if grep -qiE 'already (uploaded|exists)' err.log; then
+                      echo "$crate already on crates.io for this version — skipping"; return 0
+                    fi
+                    return 1
+                  }
+                  pub fmeca || { echo "::error::fmeca publish failed"; exit 1; }
+                  # crates.io needs a moment to index the core before the dependent resolves.
+                  sleep 20
+                  for i in 1 2 3 4 5 6; do
+                    pub fmeca-mcp && exit 0
+                    echo "fmeca-mcp publish retry $i (waiting for core to index)…"; sleep 15
+                  done
+                  echo "::error::fmeca-mcp publish failed after retries"; exit 1

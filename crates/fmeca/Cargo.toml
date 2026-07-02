@@ -1,0 +1,22 @@
+[package]
+name = "fmeca"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Deterministic, offline kernel for structured FMECA (Failure Modes, Effects & Criticality Analysis): an event-sourced failure-mode ledger where criticality is a fixed qualitative S×P matrix, residual risk and standing are computed, the prevent→detect→fail-fast mitigation discipline is enforced, and a readiness gate reports whether every High/Medium residual has been reduced to Low."
+keywords = ["fmeca", "risk", "failure-modes", "criticality", "analysis"]
+categories = ["development-tools"]
+
+[lib]
+name = "fmeca"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
