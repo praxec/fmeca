@@ -5,8 +5,8 @@
 mod common;
 
 use common::{failure_mode, temp_engine};
-use fmeca::criticality;
 use fmeca::Level::{self, High, Low, Medium};
+use fmeca::criticality;
 
 /// The authoritative fixed matrix. `[severity][probability]`.
 const EXPECTED: [(Level, Level, Level); 9] = [
