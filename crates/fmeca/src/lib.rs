@@ -56,7 +56,7 @@ pub mod scoring;
 pub mod signal;
 pub mod store;
 
-pub use analyze::{analyze, AnalyzeFailureMode, AnalyzeInput, AnalyzeMitigation, AnalyzeReport};
+pub use analyze::{AnalyzeFailureMode, AnalyzeInput, AnalyzeMitigation, AnalyzeReport, analyze};
 pub use criticality::criticality;
 pub use engine::Engine;
 pub use error::{FmecaError, Result};
@@ -69,7 +69,7 @@ pub use model::{
 };
 pub use projection::{FailureModeView, FmecaState, Registry};
 pub use readiness::{CriticalityBuckets, ReadinessReport};
-pub use response::{response_class, ResponseClass, Scope};
-pub use scoring::{catalog, catalog_for, derive_level, derive_ordinal, Axis, ScoreCriterion};
-pub use signal::{next_risk, Signal, SignalKind};
+pub use response::{ResponseClass, Scope, response_class};
+pub use scoring::{Axis, ScoreCriterion, catalog, catalog_for, derive_level, derive_ordinal};
+pub use signal::{Signal, SignalKind, next_risk};
 pub use store::{FilesystemStore, StateStore};
