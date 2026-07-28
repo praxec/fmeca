@@ -61,10 +61,12 @@ fn missing_score_detected() {
     let state = engine.add_failure_mode("s", fm).unwrap();
     assert!(has_issue(&state, "fm", IssueType::MissingScore));
     // Unscored => clarify signal.
-    assert!(state
-        .signals
-        .iter()
-        .any(|sig| sig.failure_mode_id == "fm" && sig.kind == SignalKind::Clarify));
+    assert!(
+        state
+            .signals
+            .iter()
+            .any(|sig| sig.failure_mode_id == "fm" && sig.kind == SignalKind::Clarify)
+    );
 }
 
 #[test]
@@ -77,14 +79,18 @@ fn unmitigated_high_detected() {
         .unwrap();
     assert!(has_issue(&state, "fm", IssueType::UnmitigatedHigh));
     // notify (high criticality) + remediate (unmitigated) signals.
-    assert!(state
-        .signals
-        .iter()
-        .any(|sig| sig.failure_mode_id == "fm" && sig.kind == SignalKind::Notify));
-    assert!(state
-        .signals
-        .iter()
-        .any(|sig| sig.failure_mode_id == "fm" && sig.kind == SignalKind::Remediate));
+    assert!(
+        state
+            .signals
+            .iter()
+            .any(|sig| sig.failure_mode_id == "fm" && sig.kind == SignalKind::Notify)
+    );
+    assert!(
+        state
+            .signals
+            .iter()
+            .any(|sig| sig.failure_mode_id == "fm" && sig.kind == SignalKind::Remediate)
+    );
 }
 
 #[test]
@@ -142,10 +148,12 @@ fn residual_still_high_detected_for_under_mitigation() {
         .unwrap();
     assert!(has_issue(&state, "fm", IssueType::ResidualStillHigh));
     // remediate signal present.
-    assert!(state
-        .signals
-        .iter()
-        .any(|sig| sig.failure_mode_id == "fm" && sig.kind == SignalKind::Remediate));
+    assert!(
+        state
+            .signals
+            .iter()
+            .any(|sig| sig.failure_mode_id == "fm" && sig.kind == SignalKind::Remediate)
+    );
 }
 
 #[test]

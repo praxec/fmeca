@@ -4,7 +4,8 @@ members = ["crates/fmeca", "crates/fmeca-mcp"]
 
 [workspace.package]
 version = "0.0.1"
-edition = "2021"
+edition = "2024"
+rust-version = "1.85"
 license = "Apache-2.0"
 repository = "https://github.com/praxec/fmeca"
 authors = ["Matthew Cochran <matthew@cochranweb.com>"]

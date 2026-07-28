@@ -9,8 +9,8 @@ mod common;
 
 use common::{failure_mode_obs, temp_engine};
 use fmeca::{
-    analyze, AnalyzeInput, AnalyzeMitigation, Criticality, Domain, EntityRef, FailureModeStanding,
-    Level, MatrixStrategy, Mitigation, MitigationKind, ResponseClass, Scope,
+    AnalyzeInput, AnalyzeMitigation, Criticality, Domain, EntityRef, FailureModeStanding, Level,
+    MatrixStrategy, Mitigation, MitigationKind, ResponseClass, Scope, analyze,
 };
 
 /// A scored 3×3 failure mode built from observation ids that derive to the given
@@ -277,14 +277,16 @@ fn missing_cause_and_score_produce_clarify_blockers() {
     let fm = &report.failure_modes[0];
     assert_eq!(fm.criticality, None);
     // per-FM issues carry the missing_cause + missing_score gaps.
-    assert!(fm
-        .issues
-        .iter()
-        .any(|i| i.r#type == fmeca::IssueType::MissingCause));
-    assert!(fm
-        .issues
-        .iter()
-        .any(|i| i.r#type == fmeca::IssueType::MissingScore));
+    assert!(
+        fm.issues
+            .iter()
+            .any(|i| i.r#type == fmeca::IssueType::MissingCause)
+    );
+    assert!(
+        fm.issues
+            .iter()
+            .any(|i| i.r#type == fmeca::IssueType::MissingScore)
+    );
 }
 
 #[test]

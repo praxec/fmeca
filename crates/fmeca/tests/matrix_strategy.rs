@@ -31,10 +31,11 @@ fn explicit_strategy_is_recorded_in_state() {
     assert_eq!(st.matrix_strategy, MatrixStrategy::Nasa8004_5x5);
     assert_eq!(st.matrix_scale.len(), 5);
     // The active scoring catalog is the NASA catalog (5-level labels present).
-    assert!(st
-        .scoring_catalog
-        .iter()
-        .any(|c| c.id == "loss_of_life_or_mission" && c.level_ordinal == 5));
+    assert!(
+        st.scoring_catalog
+            .iter()
+            .any(|c| c.id == "loss_of_life_or_mission" && c.level_ordinal == 5)
+    );
     // ...and none of the 3×3 ids leak in.
     assert!(!st.scoring_catalog.iter().any(|c| c.id == "data_loss"));
 }

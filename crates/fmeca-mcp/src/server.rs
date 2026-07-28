@@ -30,6 +30,7 @@ use fmeca::{
     AnalyzeInput, Engine, FailureMode, FmecaError, MatrixStrategy, Mitigation, Rescore,
     ScoreCriterion,
 };
+use rmcp::ErrorData as McpError;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, Implementation, InitializeRequestParams,
     InitializeResult, ListToolsResult, PaginatedRequestParams, ProtocolVersion, ServerCapabilities,
@@ -37,10 +38,9 @@ use rmcp::model::{
 };
 use rmcp::service::{NotificationContext, RequestContext, RoleServer};
 use rmcp::transport::stdio;
-use rmcp::ErrorData as McpError;
 use rmcp::{ServerHandler, ServiceExt};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Tool names, `noun.verb` like the rest of the workspace.
 pub const TOOL_SESSION_OPEN: &str = "session.open";

@@ -10,7 +10,7 @@ use fmeca_mcp::{
     TOOL_RISK_NEXT, TOOL_SCORING_CATALOG, TOOL_SESSION_OPEN, TOOL_STATE_GET,
 };
 use rmcp::model::CallToolRequestParams;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn server() -> (FmecaServer, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
@@ -95,12 +95,16 @@ fn scoring_catalog_lists_criteria_and_session_state_embeds_it() {
     let criteria = cat["criteria"].as_array().unwrap();
     assert!(!criteria.is_empty());
     // It carries id/axis/level/description and includes the documented seeds.
-    assert!(criteria
-        .iter()
-        .any(|c| c["id"] == "data_loss" && c["axis"] == "severity" && c["level"] == "high"));
-    assert!(criteria
-        .iter()
-        .any(|c| c["id"] == "rare_edge_case" && c["axis"] == "probability" && c["level"] == "low"));
+    assert!(
+        criteria
+            .iter()
+            .any(|c| c["id"] == "data_loss" && c["axis"] == "severity" && c["level"] == "high")
+    );
+    assert!(
+        criteria.iter().any(|c| c["id"] == "rare_edge_case"
+            && c["axis"] == "probability"
+            && c["level"] == "low")
+    );
 
     // The catalog is also embedded in session state so the caller knows the vocab.
     let opened = call(&srv, TOOL_SESSION_OPEN, json!({ "session_id": "vocab" })).unwrap();
@@ -114,11 +118,13 @@ fn session_open_defaults_to_3x3_strategy() {
     assert_eq!(opened["matrix_strategy"], "qualitative3x3");
     assert_eq!(opened["matrix_scale"].as_array().unwrap().len(), 3);
     // The active catalog is the 3×3 catalog (data_loss present).
-    assert!(opened["scoring_catalog"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|c| c["id"] == "data_loss"));
+    assert!(
+        opened["scoring_catalog"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == "data_loss")
+    );
 }
 
 #[test]
@@ -133,9 +139,10 @@ fn session_open_selects_nasa_5x5_strategy_and_its_catalog() {
     assert_eq!(opened["matrix_strategy"], "nasa8004_5x5");
     assert_eq!(opened["matrix_scale"].as_array().unwrap().len(), 5);
     let cat = opened["scoring_catalog"].as_array().unwrap();
-    assert!(cat
-        .iter()
-        .any(|c| c["id"] == "loss_of_life_or_mission" && c["level_ordinal"] == 5));
+    assert!(
+        cat.iter()
+            .any(|c| c["id"] == "loss_of_life_or_mission" && c["level_ordinal"] == 5)
+    );
     // No 3×3 id leaks into the NASA catalog.
     assert!(!cat.iter().any(|c| c["id"] == "data_loss"));
 
@@ -147,11 +154,13 @@ fn session_open_selects_nasa_5x5_strategy_and_its_catalog() {
     )
     .unwrap();
     assert_eq!(nasa_cat["matrix_strategy"], "nasa8004_5x5");
-    assert!(nasa_cat["criteria"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|c| c["id"] == "near_certain"));
+    assert!(
+        nasa_cat["criteria"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == "near_certain")
+    );
 }
 
 #[test]
@@ -319,9 +328,11 @@ fn readiness_and_export_reflect_blockers() {
     assert_eq!(r["ready"], false);
     let blockers = r["blockers"].as_array().unwrap();
     assert!(!blockers.is_empty());
-    assert!(blockers
-        .iter()
-        .any(|b| b.as_str().unwrap().starts_with("RESIDUAL:")));
+    assert!(
+        blockers
+            .iter()
+            .any(|b| b.as_str().unwrap().starts_with("RESIDUAL:"))
+    );
     assert_eq!(r["by_criticality"]["high"], 1);
 
     let doc = call(&srv, TOOL_REPORT_EXPORT, json!({ "session_id": "s1" })).unwrap();
@@ -471,11 +482,13 @@ fn analyze_computes_a_full_report_in_one_call() {
     assert_eq!(report["risk_ranking"][0], "fm-high");
     // not ready: the unmitigated High residual stands.
     assert_eq!(report["ready"], false);
-    assert!(report["blockers"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|b| b.as_str().unwrap().starts_with("RESIDUAL:")));
+    assert!(
+        report["blockers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|b| b.as_str().unwrap().starts_with("RESIDUAL:"))
+    );
 }
 
 #[test]
@@ -537,9 +550,11 @@ fn analyze_empty_batch_is_not_ready() {
     let report = call(&srv, TOOL_ANALYZE, json!({ "failure_modes": [] })).unwrap();
     assert_eq!(report["ready"], false);
     assert!(report["failure_modes"].as_array().unwrap().is_empty());
-    assert!(report["blockers"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|b| b.as_str().unwrap().starts_with("EMPTY:")));
+    assert!(
+        report["blockers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|b| b.as_str().unwrap().starts_with("EMPTY:"))
+    );
 }

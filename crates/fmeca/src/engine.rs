@@ -23,7 +23,7 @@ use crate::matrix::MatrixStrategy;
 use crate::model::{FailureMode, Mitigation, Rescore};
 use crate::projection::{self, FailureModeView, FmecaState};
 use crate::scoring::{self, Axis};
-use crate::store::{validate_session_id, StateStore};
+use crate::store::{StateStore, validate_session_id};
 
 /// Per-session lock registry: a `session_id -> lock` map behind a `Mutex`.
 ///

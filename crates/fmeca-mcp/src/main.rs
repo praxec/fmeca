@@ -15,7 +15,7 @@
 use std::sync::Arc;
 
 use fmeca::{Engine, FilesystemStore};
-use fmeca_mcp::{resolve_state_dir, FmecaServer};
+use fmeca_mcp::{FmecaServer, resolve_state_dir};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
