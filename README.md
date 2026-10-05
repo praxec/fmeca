@@ -40,23 +40,63 @@ softer answer.
 
 ## Install
 
-From crates.io:
+### Prebuilt binary (no Rust, Cargo, or Git required)
+
+```sh
+# Linux / macOS
+curl -fsSL https://github.com/praxec/fmeca/releases/latest/download/install.sh | sh
+
+# Windows (PowerShell)
+irm https://github.com/praxec/fmeca/releases/latest/download/install.ps1 | iex
+```
+
+The installer resolves your OS and CPU architecture, downloads the matching
+release asset, verifies its SHA-256 against the release's `checksums.sha256`,
+extracts it safely, and atomically installs the binary into a user-local
+managed directory (`$HOME/.local/bin` on Linux/macOS,
+`%LOCALAPPDATA%\Programs\fmeca-mcp` on Windows). It never compiles from source
+and fails loudly on an unsupported OS/architecture.
+
+Pin a specific release instead of the current latest stable:
+
+```sh
+curl -fsSL https://github.com/praxec/fmeca/releases/latest/download/install.sh \
+  | sh -s -- --version v0.0.2
+```
+
+The installer scripts are published as release assets alongside the binaries.
+
+Or download the archive directly. Every release publishes a `checksums.sha256`
+and a machine-readable `release-manifest.json` listing each target, asset,
+digest, version, and source SHA:
+
+| OS | Arch | Target triple | Asset | Build support | Runtime smoke tested |
+|----|------|---------------|-------|---------------|----------------------|
+| Linux | x86_64 | `x86_64-unknown-linux-gnu` | `fmeca-mcp-x86_64-unknown-linux-gnu.tar.gz` | native CI | native CI |
+| Linux | arm64 | `aarch64-unknown-linux-gnu` | `fmeca-mcp-aarch64-unknown-linux-gnu.tar.gz` | native CI | native CI |
+| macOS | x86_64 | `x86_64-apple-darwin` | `fmeca-mcp-x86_64-apple-darwin.tar.gz` | native CI | native CI |
+| macOS | Apple Silicon | `aarch64-apple-darwin` | `fmeca-mcp-aarch64-apple-darwin.tar.gz` | native CI | native CI |
+| Windows | x86_64 | `x86_64-pc-windows-msvc` | `fmeca-mcp-x86_64-pc-windows-msvc.zip` | native CI | native CI |
+| Windows | arm64 | `aarch64-pc-windows-msvc` | `fmeca-mcp-aarch64-pc-windows-msvc.zip` | native CI | native CI |
+
+"Native CI" means each asset is built and its MCP `initialize`/`tools/list`
+handshake smoke-tested on that platform's own runner. No other CPU/OS
+combination is claimed; unsupported platforms are rejected rather than
+silently cross-compiled.
+
+### Updates
+
+Re-run the installer to update. Only the binary in the managed install
+directory is replaced (atomically); application state and configuration live
+outside that directory and are never overwritten. State is resolved from
+`FMECA_STATE_DIR`, else `$XDG_DATA_HOME/fmeca-mcp` (or
+`$HOME/.local/share/fmeca-mcp`), else `./fmeca-state`.
+
+### From source
 
 ```sh
 cargo install fmeca-mcp
 ```
-
-Or download a pre-built binary for your platform from the
-[latest release](https://github.com/praxec/fmeca/releases/latest)
-(verify against the release's `checksums.sha256`):
-
-| Platform | Download |
-|----------|----------|
-| Linux x86_64 | [`.tar.gz`](https://github.com/praxec/fmeca/releases/latest/download/fmeca-mcp-x86_64-unknown-linux-gnu.tar.gz) |
-| Linux ARM64 | [`.tar.gz`](https://github.com/praxec/fmeca/releases/latest/download/fmeca-mcp-aarch64-unknown-linux-gnu.tar.gz) |
-| macOS x86_64 | [`.tar.gz`](https://github.com/praxec/fmeca/releases/latest/download/fmeca-mcp-x86_64-apple-darwin.tar.gz) |
-| macOS Apple Silicon | [`.tar.gz`](https://github.com/praxec/fmeca/releases/latest/download/fmeca-mcp-aarch64-apple-darwin.tar.gz) |
-| Windows x86_64 | [`.zip`](https://github.com/praxec/fmeca/releases/latest/download/fmeca-mcp-x86_64-pc-windows-msvc.zip) |
 
 ## MCP client config
 
