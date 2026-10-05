@@ -2,13 +2,13 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
   "name": "io.github.praxec/fmeca",
   "description": "FMECA (Failure Mode, Effects and Criticality Analysis) MCP server — event-sourced fold, criticality matrix, readiness.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "repository": { "url": "https://github.com/praxec/fmeca", "source": "github" },
   "packages": [
     {
       "registryType": "oci",
       "identifier": "ghcr.io/praxec/fmeca",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "transport": { "type": "stdio" }
     }
   ]
