@@ -1,0 +1,45 @@
+{
+  "name": "@matthew-cochran/fmeca",
+  "version": "0.0.2",
+  "description": "npx launcher for the fmeca MCP server: downloads the verified release binary for your platform and runs it over stdio.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "fmeca",
+    "failure-modes",
+    "reliability",
+    "fmeca-mcp"
+  ],
+  "license": "Apache-2.0",
+  "author": "Matthew Cochran <matthew@cochranweb.com>",
+  "homepage": "https://github.com/praxec/fmeca#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/praxec/fmeca.git",
+    "directory": "npm"
+  },
+  "bugs": {
+    "url": "https://github.com/praxec/fmeca/issues"
+  },
+  "bin": {
+    "fmeca-mcp": "bin/fmeca-mcp.js"
+  },
+  "files": [
+    "bin/fmeca-mcp.js",
+    "lib/install.js",
+    "lib/postinstall.js",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "postinstall": "node lib/postinstall.js",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

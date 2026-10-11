@@ -58,3 +58,30 @@ jobs:
       # with `package --list`; #26 restores the full publish dry-run after
       # `fmeca` is published.
       - run: cargo package --locked --list -p fmeca-mcp
+  npm:
+    name: npm launcher (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: launcher tests
+        run: node --test npm/test/*.test.mjs
+      - name: npm pack (dry run)
+        working-directory: npm
+        run: npm pack --dry-run --ignore-scripts
+      # Runs the release publish script against a freshly packed tarball.
+      - name: npm publish script (dry run)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd npm
+          npm pack --ignore-scripts
+          bash ../scripts/npm-publish.sh ./matthew-cochran-fmeca-*.tgz "$(node -p "require('./package.json').version")" --dry-run

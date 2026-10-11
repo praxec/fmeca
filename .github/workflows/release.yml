@@ -163,6 +163,28 @@ jobs:
           set -euo pipefail
           gh release upload "$TAG" dist/checksums.sha256 dist/release-manifest.json \
             scripts/install.sh scripts/install.ps1 --clobber
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Packs the npm launcher (npm/) and attaches the tarball with its digest.
+      # The `npm` job publishes exactly this file once the release is public.
+      - name: pack npm launcher and attach the tarball
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.create-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          npm_version=$(node -p "require('./npm/package.json').version")
+          [ "$npm_version" = "$VERSION" ] \
+            || { echo "::error::npm/package.json version $npm_version does not match release $VERSION"; exit 1; }
+          tarball="matthew-cochran-fmeca-${VERSION}.tgz"
+          (cd npm && npm pack --ignore-scripts --pack-destination ../dist)
+          [ -s "dist/${tarball}" ] || { echo "::error::npm pack did not produce dist/${tarball}"; exit 1; }
+          # The maintainer checks the tarball against this digest before publishing.
+          (cd dist && sha256sum "${tarball}" > npm-package.sha256)
+          gh release upload "$TAG" "dist/${tarball}" dist/npm-package.sha256 --clobber
       - name: publish release (complete matrix verified)
         shell: bash
         env:
@@ -171,6 +193,65 @@ jobs:
         run: |
           set -euo pipefail
           gh release edit "$TAG" --draft=false
+
+  npm:
+    name: npm publish
+    needs: finalize
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    # npm trusted publishing: npm authenticates this job over GitHub OIDC (the
+    # trusted publisher on npmjs.com names praxec/fmeca, release.yml and the
+    # `npm` environment). There is no npm token; the environment requires a
+    # maintainer's approval before the job starts. Provenance is attached.
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      # The checkout supplies scripts/npm-publish.sh, which skips a version
+      # already on npm and sends pre-releases to the `next` dist-tag.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+      - name: install npm with trusted publishing support
+        run: npm install -g npm@11.6.2
+      - name: download the release tarball and verify its digest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          V="${TAG#v}"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir npm-dist \
+            --pattern "matthew-cochran-fmeca-${V}.tgz" --pattern npm-package.sha256
+          (cd npm-dist && sha256sum -c npm-package.sha256)
+      - name: publish (skipped if this version is already on npm)
+        shell: bash
+        run: |
+          set -euo pipefail
+          V="${TAG#v}"
+          bash scripts/npm-publish.sh "npm-dist/matthew-cochran-fmeca-${V}.tgz" "$V"
+      - name: verify the published launcher runs the release binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          V="${TAG#v}"
+          # The registry can take a moment to serve a new version.
+          for _ in 1 2 3 4 5 6; do
+            if out=$(npx -y "@matthew-cochran/fmeca@${V}" --version 2>/dev/null) \
+              && [ "$out" = "fmeca-mcp ${V}" ]; then
+              echo "$out"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::npx @matthew-cochran/fmeca@${V} --version did not print fmeca-mcp ${V}"
+          exit 1
 
   image:
     name: container image
