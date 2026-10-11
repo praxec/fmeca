@@ -68,9 +68,10 @@ carries a ref to it: `"refs": ["cpm:<plan_id>/<deliverable_id>"]`.
   plan failure mode, write `next_effect` as that failure mode's cause.
 - Set `single_point` when only one executor can do the work, or nothing can replace a
   deliverable on the critical path.
-- Probability observations come from the schedule: `happens_in_normal_use` for a
-  deliverable with no float and a three-point estimate wider than it, `occasional` for one
-  with some float.
+- Probability observations come from the schedule: `happens_in_normal_use` when the
+  deliverable's pessimistic estimate minus its likely estimate exceeds its `float` (any
+  slip within the estimate's range moves the milestone); `occasional` when that spread is
+  within the float but uses more than half of it; `rare_edge_case` when it uses less.
 
 ## 5. What counts as a mitigation, and what evidence verifies it
 

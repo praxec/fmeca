@@ -42,13 +42,21 @@ Find the ids first: `session.list` shows each analysis's `resolution` counts, an
 | `planned` | every mitigation starts here | none |
 | `implemented` | the change that carries it merged | the `commit` or `pull_request` |
 | `verified` | a test or check proves it works | at least one item whose `kind` is not `note`: `test`, `url` (CI run), `file` (runbook, ADR) |
-| `abandoned` | it was dropped or replaced | a `note` saying why |
+| `abandoned` | it was dropped or replaced | the top-level `note` saying why |
 
 - Give every evidence item a `basis`: `design`, `test`, `inspection`, `failure_history` or
   `operational_use`. `kind` says where the evidence is; `basis` says why it counts.
 - Evidence accumulates across changes; the server stamps each change's `at`.
 - Verify only what the evidence proves. A merged PR is not a passing test. Do not mark
   `verified` on a test you have not seen pass.
+- To abandon, explain in the top-level `note` field, not in an evidence item:
+
+```json
+{"variant": "set_mitigation_status", "session_id": "checkout-implementation",
+ "mitigation_id": "m-request-timeout", "status": "abandoned",
+ "note": "Replaced by m-provider-fallback: a timeout alone only bounds the wait"}
+```
+
 - An `abandoned` mitigation stops reducing residual risk, so the failure mode may become a
   blocker again. Run `risk.next` and add the replacement mitigation.
 - Evidence found at one level often proves a mitigation at another (a verification test

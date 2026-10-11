@@ -43,8 +43,8 @@ threshold, not just the verdict: 0.31 against a 0.3 threshold is a coin toss.
 
 | Finding | Target | Flagged when | What to do |
 |---|---|---|---|
-| a claimed observation (`claimed: true`) | `<fm>/<observation>` | `probability` below 0.3 | re-read the evidence for that observation. If it really does not apply, `append` a `rescore` with the observations that do, and a `source`. If it does, keep it and say why |
-| an unclaimed observation (`claimed: false`) | `<fm>/<observation>` | `probability` above 0.7: the next level up may apply | consider it. If the evidence supports it, `rescore`; otherwise leave it |
+| a claimed observation (`claimed: true`) | `<fm>/<observation>` | `probability` below 0.3 | re-read the evidence for that observation. If it really does not apply, `append` a `rescore` ([shape](../fmeca/SKILL.md#2-observations-not-scores)) that resends **both** axes in full, without that observation, and a `source`. If it does, keep it and say why |
+| an unclaimed observation (`claimed: false`) | `<fm>/<observation>` | `probability` above 0.7: the next level up may apply | consider it. If the evidence supports it, `rescore` with both axes in full (the reference's example); otherwise leave it |
 | a mitigation that may not address its cause | `<fm>/<mitigation>` | below 0.5 | strengthen it, add another mitigation, or make its residual observations honest |
 | a class mismatch (`declared` vs `choice`) | `<fm>/<mitigation>#class` | another kind is at least 0.6 likely | if Jev is right, the kind is wrong: add a mitigation of the right kind (the old one cannot be edited; abandon it with [fmeca-resolve](../fmeca-resolve/SKILL.md)), or strengthen it until the declared kind is true |
 | a coverage candidate | `coverage/<class>` | at least 0.6 that a class is uncovered | decide whether a real failure mode of that class exists here. If it does, `append` it with its own cause and evidence. Jev never invents failure modes, and neither should you on its say-so |

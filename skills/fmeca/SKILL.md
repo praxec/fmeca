@@ -50,7 +50,16 @@ observation on an axis wins) and the matrix gives criticality `low`, `medium` or
   `session.open.matrix_strategy` for safety- or mission-critical work. Its ids differ.
 - The strategy is fixed once the session is open. An unknown id is `INVALID_OBSERVATION`.
 - Pick the observations the evidence supports, not the ones that give the answer you want.
-  If the evidence changes, `append` a `rescore` with the new observations and a source.
+- **Rescore** when the evidence changes. A rescore **replaces both axes**: resend the full
+  `severity_observations` and `probability_observations`, including the ones that have not
+  changed, or the axis you leave out is emptied and the failure mode becomes unscored.
+
+```json
+{"variant": "rescore", "session_id": "checkout-implementation", "rescore": {
+  "failure_mode_id": "fm-retry-double-charge", "session_id": "checkout-implementation",
+  "severity_observations": ["data_loss"], "probability_observations": ["occasional"],
+  "source": {"turn_id": "vet-2026-10-11"}}}
+```
 
 ## 3. Failure modes
 
@@ -115,8 +124,9 @@ Every level skill runs this loop:
    come back and fix any clarify signal now.
 4. `risk.next` returns the worst unmitigated failure mode, or `risk: null`.
 5. `append` mitigations for it, prevention first (`add_mitigation`).
-6. Repeat from 4 until `risk.next` is null. Then run `readiness.assess` and work its
-   `RESIDUAL` and `DISCIPLINE` blockers: under-mitigated failure modes never appear in
+6. Repeat from 4 until `risk.next` is null. `risk.next` skips failure modes that are
+   excluded or accepted (risk deliberately retained). Then run `readiness.assess` and work
+   its `RESIDUAL` and `DISCIPLINE` blockers: under-mitigated failure modes never appear in
    `risk.next`.
 7. Report the standing to the user and hand off to the next level.
 

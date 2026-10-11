@@ -615,7 +615,7 @@ fn json_examples_parse() {
 #[test]
 fn one_shot_example_is_accepted_by_analyze() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let map = serde_json::from_str(&one_shot_example()).unwrap_or_default();
+    let map = serde_json::from_str(&one_shot_example()).expect("example parses");
     let result = server(dir.path())
         .dispatch_call(CallToolRequestParams::new("analyze".to_string()).with_arguments(map));
     assert!(result.is_ok(), "analyze rejected the example: {result:?}");

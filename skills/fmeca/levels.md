@@ -22,7 +22,7 @@ not exist and you have no material for it, open the child without a `parent` and
 
 | Level | Typical failure modes (`domain`) | Mitigations | Evidence that verifies them (`kind`, `basis`) |
 |---|---|---|---|
-| `concept` | no real value, harm to users or bystanders, misuse, legal or ethical exposure (`ux`, `security`) | scope or positioning changes | a decision record: `url` (or `note`), basis `design` |
+| `concept` | no real value, harm to users or bystanders, misuse, legal or ethical exposure (`ux`, `security`) | scope or positioning changes | a decision record: `url` or `file` (a `note` may explain it), basis `design` |
 | `conops` | workflow breaks, operator error, hand-offs between people or teams, missed SLAs (`delivery`, `ux`) | process controls, runbooks, checklists | the runbook as `file`, basis `operational_use` |
 | `technical_plan` | integration faults, data integrity, scaling limits, external dependencies (`architecture`, `runtime`, `security`) | design choices, guards, fallbacks | the ADR as `file`, or the `pull_request` that lands it, basis `design` |
 | `project_plan` | critical-path slips, two deliverables editing one file, missing prerequisites (`delivery`) | re-sequencing, buffers, splits | `url` to the merged plan revision, basis `design` |

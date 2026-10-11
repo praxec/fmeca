@@ -11,7 +11,8 @@ skill and the server disagree, the server wins.
 
 ## When to use
 
-- The level skill's loop is done: `risk.next` is null and the blockers have been worked.
+- The level skill's loop is done: `risk.next` is null (it skips excluded and accepted
+  failure modes) and the blockers have been worked.
 - A release, merge, design approval or phase gate needs the analysis.
 - The user asks "are we ready" or "can I sign this off".
 
