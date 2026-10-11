@@ -1,14 +1,15 @@
 //! `report.export`: emit the FMECA report.
 //!
 //! A row per failure mode (the FMECA table per `P_RUN_FMECA`'s output schema),
-//! the residual-risk buckets, and an explicit **accepted-risks** section. v1 has
-//! no "accept-risk" move, so `accepted_risks` is always empty — it exists so the
-//! report schema is stable and nothing High/Medium is ever waved through
-//! silently.
+//! the residual-risk buckets, an explicit **accepted-risks** section (failure
+//! modes dispositioned `accepted`), and the single-point **critical items**.
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{Criticality, Domain, FailureModeStanding, MitigationKind};
+use crate::model::{
+    Criticality, Disposition, Domain, FailureModeStanding, MitigationKind, MitigationStatus,
+    ResolutionEvidence,
+};
 use crate::projection::FmecaState;
 use crate::readiness::CriticalityBuckets;
 use crate::response::ResponseClass;
@@ -23,6 +24,12 @@ pub struct ExportedMitigation {
     pub kind: MitigationKind,
     pub description: String,
     pub residual_criticality: Option<Criticality>,
+    /// Resolution status (spec §6.3).
+    #[serde(default)]
+    pub status: MitigationStatus,
+    /// Evidence accumulated across status changes.
+    #[serde(default)]
+    pub evidence: Vec<ResolutionEvidence>,
 }
 
 /// A single FMECA table row (`P_RUN_FMECA` schema).
@@ -33,7 +40,16 @@ pub struct FmecaRow {
     pub domain: Domain,
     pub description: String,
     pub cause: Option<String>,
+    /// The END effect.
     pub effect: Option<String>,
+    #[serde(default)]
+    pub local_effect: Option<String>,
+    #[serde(default)]
+    pub next_effect: Option<String>,
+    #[serde(default)]
+    pub single_point: bool,
+    #[serde(default)]
+    pub disposition: Disposition,
     pub criticality: Option<Criticality>,
     pub residual_criticality: Option<Criticality>,
     pub standing: Option<FailureModeStanding>,
@@ -50,8 +66,11 @@ pub struct FmecaReport {
     pub ready: bool,
     pub rows: Vec<FmecaRow>,
     pub residual_buckets: CriticalityBuckets,
-    /// Explicitly accepted residual risks. Empty in v1 (no accept-risk move).
+    /// Failure-mode ids whose residual risk was explicitly accepted.
     pub accepted_risks: Vec<String>,
+    /// Single-point failure modes with High raw criticality, not excluded.
+    #[serde(default)]
+    pub critical_items: Vec<String>,
     /// Carried verbatim so the caller sees exactly why it is/isn't ready.
     pub blockers: Vec<String>,
 }
@@ -70,6 +89,10 @@ pub(crate) fn build(state: &FmecaState) -> FmecaReport {
                 description: fm.description.clone(),
                 cause: fm.cause.clone(),
                 effect: fm.effect.clone(),
+                local_effect: fm.local_effect.clone(),
+                next_effect: fm.next_effect.clone(),
+                single_point: fm.single_point,
+                disposition: fmv.disposition,
                 criticality: fmv.criticality,
                 residual_criticality: fmv.residual_criticality,
                 standing: fmv.standing,
@@ -88,6 +111,8 @@ pub(crate) fn build(state: &FmecaState) -> FmecaReport {
                             state.matrix_strategy,
                             m,
                         ),
+                        status: m.status,
+                        evidence: m.evidence.clone(),
                     })
                     .collect(),
                 source_turn: fm.source.turn_id.clone(),
@@ -100,7 +125,8 @@ pub(crate) fn build(state: &FmecaState) -> FmecaReport {
         ready: state.readiness.ready,
         rows,
         residual_buckets: state.readiness.by_criticality.clone(),
-        accepted_risks: Vec::new(),
+        accepted_risks: state.readiness.accepted_risks.clone(),
+        critical_items: state.readiness.critical_items.clone(),
         blockers: state.readiness.blockers.clone(),
     }
 }

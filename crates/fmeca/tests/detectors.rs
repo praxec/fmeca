@@ -29,6 +29,11 @@ fn bare(session: &str, id: &str) -> FailureMode {
         domain: Domain::Runtime,
         scope: None,
         source: EvidenceRef::new("t1"),
+        parent: None,
+        refs: Vec::new(),
+        local_effect: None,
+        next_effect: None,
+        single_point: false,
     }
 }
 
