@@ -63,7 +63,8 @@ jobs:
       - name: copy skills into the fmeca-mcp package
         run: |
           if [ -d skills ]; then cp -R skills crates/fmeca-mcp/skills; fi
-      - run: cargo package --locked --list -p fmeca-mcp
+      # skills/ is copied in as a generated packaging input (gitignored); see build.rs
+      - run: cargo package --locked --list -p fmeca-mcp --allow-dirty
   npm:
     name: npm launcher (${{ matrix.os }})
     strategy:
