@@ -1,10 +1,12 @@
 //! Command-line parsing for `fmeca-mcp`.
 //!
-//! The binary serves MCP over stdio by default; `--version`, `--help`, `init`
-//! and `check` are the only other invocations. Parsing is pure (arguments in,
+//! The binary serves MCP over stdio by default; `--version`, `--help`, `init`,
+//! `check` and `skills` are the only other invocations. Parsing is pure (arguments in,
 //! [`Command`] out) so it is tested without spawning a process.
 
 use std::path::PathBuf;
+
+use crate::skills::{self, SkillsCommand};
 
 /// A parsed invocation. `Serve` (no arguments) is the default and runs the
 /// existing MCP server unchanged.
@@ -20,6 +22,8 @@ pub enum Command {
     Init { dir: Option<PathBuf> },
     /// Validate every log in a state dir.
     Check { dir: Option<PathBuf> },
+    /// Install or uninstall the embedded agent skills.
+    Skills(SkillsCommand),
 }
 
 /// A user error, printed before [`USAGE`] when parsing fails.
@@ -37,6 +41,9 @@ pub fn parse(args: &[String]) -> Result<Command, UsageError> {
         "--help" | "-h" => single(args, Command::Help),
         "init" => parse_with_dir(&args[1..]).map(|dir| Command::Init { dir }),
         "check" => parse_with_dir(&args[1..]).map(|dir| Command::Check { dir }),
+        "skills" => skills::parse(&args[1..])
+            .map(Command::Skills)
+            .map_err(UsageError),
         other => Err(UsageError(format!("unknown argument: {other}"))),
     }
 }
@@ -73,8 +80,28 @@ USAGE:
     fmeca-mcp --help, -h      Print this help
     fmeca-mcp init [--dir D]  Create .fmeca/README.md and .fmeca/.gitattributes
     fmeca-mcp check [--dir D] Validate every <session_id>.jsonl log in the state dir
+    fmeca-mcp skills install|uninstall ...
+                              Install or remove the agent skills (see below)
 
 The state dir is FMECA_STATE_DIR, else the nearest ancestor with a .fmeca/
 directory, else $XDG_DATA_HOME/fmeca-mcp or $HOME/.local/share/fmeca-mcp,
 else ./fmeca-state.
+
+SKILLS:
+    fmeca-mcp skills install   --target <target> (--project <dir> | --user) [--dry-run] [--force]
+    fmeca-mcp skills uninstall --target <target> (--project <dir> | --user) [--dry-run]
+
+Targets:
+  claude     Claude Code      .claude/skills/          (user: ~/.claude/skills/)
+  codex      OpenAI Codex     .agents/skills/          (user: ~/.agents/skills/)
+  cursor     Cursor           .cursor/skills/          (user: ~/.cursor/skills/)
+  copilot    GitHub Copilot   .github/skills/          (user: ~/.copilot/skills/)
+  gemini     Gemini CLI       .agents/skills/ + .gemini/commands/fmeca-*.toml
+                              (user: ~/.agents/skills/ + ~/.gemini/commands/fmeca-*.toml)
+  agents-md  AGENTS.md block + .agents/skills/         (project only; for user scope use codex)
+  all        .claude/skills/ + .agents/skills/
+
+A file you edited, or one fmeca-mcp did not write, is kept and reported as
+skipped; --force overwrites it. No MCP configuration is written: the command
+to register the server is printed after the install.
 ";

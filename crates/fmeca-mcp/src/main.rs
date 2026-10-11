@@ -13,11 +13,13 @@
 //! [`fmeca_mcp::resolve_state_dir`]); override with `FMECA_STATE_DIR`.
 
 use std::path::PathBuf;
+use std::process::ExitCode;
 use std::sync::Arc;
 
 use fmeca::{Engine, FilesystemStore};
 use fmeca_mcp::cli::{Command, USAGE, parse};
 use fmeca_mcp::project::{FileOutcome, check, init};
+use fmeca_mcp::skills;
 use fmeca_mcp::{FmecaServer, resolve_state_dir, resolve_state_dir_from};
 use tracing_subscriber::EnvFilter;
 
@@ -46,6 +48,13 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Init { dir } => run_init(dir),
         Command::Check { dir } => run_check(dir),
+        Command::Skills(command) => {
+            // The installer needs no async runtime and sets its own exit code.
+            if skills::run(command) != ExitCode::SUCCESS {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
     }
 }
 

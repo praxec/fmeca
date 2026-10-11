@@ -57,6 +57,12 @@ jobs:
       # with `--no-verify`). Task 3's resolution: verify fmeca-mcp packaging
       # with `package --list`; #26 restores the full publish dry-run after
       # `fmeca` is published.
+      # build.rs embeds $CARGO_MANIFEST_DIR/skills when present, and the packaged
+      # crate cannot reach ../../skills, so copy the workspace skills in first
+      # (the copy is gitignored).
+      - name: copy skills into the fmeca-mcp package
+        run: |
+          if [ -d skills ]; then cp -R skills crates/fmeca-mcp/skills; fi
       - run: cargo package --locked --list -p fmeca-mcp
   npm:
     name: npm launcher (${{ matrix.os }})
@@ -126,3 +132,22 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - run: cargo build --locked --release -p fmeca-mcp --bin fmeca-mcp --target ${{ matrix.target }}
+  skills-smoke:
+    name: skills install smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - run: cargo build -p fmeca-mcp
+      # With an empty skills/ this asserts exit 0 and idempotent output only;
+      # once skills/ holds skills it asserts their files too.
+      - name: skills install, rerun, uninstall
+        run: scripts/skills-smoke.sh target/debug/fmeca-mcp "$RUNNER_TEMP"

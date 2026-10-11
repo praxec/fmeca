@@ -13,9 +13,26 @@ questions about contributing, see [SUPPORT.md](SUPPORT.md).
 - The pinned toolchain in [`rust-toolchain.toml`](rust-toolchain.toml) is
   **1.99.0** (with `rustfmt` and `clippy`). `rustup` installs it automatically
   when you run Cargo in the repository.
-- The **MSRV** (minimum supported Rust version) is **1.85**, recorded as
-  `rust-version` in the workspace manifest. Do not use language or library
+- The **MSRV** (minimum supported Rust version) is **1.85** for the `fmeca`
+  kernel, recorded as `rust-version` in the workspace manifest; `fmeca-mcp`
+  sets **1.89**. Do not use language or library
   features newer than 1.85 without raising the MSRV deliberately.
+
+## Skills and packaging
+
+`fmeca-mcp` embeds the workspace `skills/` directory at build time (`build.rs`
+reads `$CARGO_MANIFEST_DIR/skills` if it exists, otherwise `../../skills`; with
+neither, or an empty directory, it embeds nothing). `cargo package` cannot reach
+`../../skills`, so the `package` CI job first copies `skills/` into
+`crates/fmeca-mcp/skills/`, which is gitignored, and the packaged crate embeds
+that copy. Do the same copy before a local `cargo package` or `cargo publish`.
+Install runs serialise on an OS file lock per target root. The lock files live
+in the per-user cache directory (`$XDG_CACHE_HOME/fmeca-mcp/locks`, else
+`~/.cache/fmeca-mcp/locks`; `~/Library/Caches/...` on macOS;
+`%LOCALAPPDATA%\fmeca-mcp\locks` on Windows), are named by a hash of the
+canonical root path, and are never deleted.
+`fmeca-mcp` therefore needs Rust 1.89 (`File::try_lock`); it sets its own
+`rust-version`.
 
 ## Crate map
 
