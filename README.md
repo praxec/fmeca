@@ -117,7 +117,7 @@ Mount your project to keep analyses in its `.fmeca/` folder (without a mount
 the state is lost when the container exits):
 
 ```sh
-docker run -i --rm -v "$PWD:/work" -w /work -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
+docker run -i --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
 ```
 
 ### From source
@@ -132,8 +132,8 @@ build from a checkout with `cargo build --release`.
 ## MCP client config
 
 It speaks MCP over stdio (the standard transport). Wire it into your editor like
-any other MCP server. The same entry works in Claude Code (`.mcp.json`), Cursor
-(`.cursor/mcp.json`) and Copilot (`.mcp.json`):
+any other MCP server. The same entry works in Claude Code (`.mcp.json`) and Copilot (`.mcp.json`)
+(Cursor needs `"type": "stdio"`; see its section in AGENT-INSTALL):
 
 ```json
 {
@@ -155,7 +155,7 @@ args = ["-y", "@matthew-cochran/fmeca"]
 env_vars = ["OPENROUTER_API_KEY"]
 ```
 
-Every client, with the skills install for each, is in
+Every client, with the skills install for each (including Cursor's `.cursor/mcp.json` entry), is in
 [docs/AGENT-INSTALL.md](docs/AGENT-INSTALL.md). The key is optional (only `vet`
 uses it) and is never written to a config file: pass it as
 `"env": { "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}" }` where the client

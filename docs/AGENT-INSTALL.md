@@ -130,8 +130,12 @@ tool on the example in the fmeca skill" and it should return the same report.
    # binary
    claude mcp add --transport stdio --scope user fmeca -- fmeca-mcp
    # Docker, analyses kept in the repo you launch from (see the .fmeca/ section)
-   claude mcp add --transport stdio --scope project fmeca -- docker run -i --rm -v "$PWD:/work" -w /work -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
+   claude mcp add --transport stdio --scope local fmeca -- docker run -i --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
    ```
+
+   For the Docker variant use `--scope local`: the shell expands `$PWD` when you
+   add the server, so with `--scope project` your absolute path would be baked
+   into a `.mcp.json` you commit.
 
    `--scope project` writes `.mcp.json` in the project root, which you can
    commit. Written by hand it looks like this (Claude Code expands
@@ -150,7 +154,8 @@ tool on the example in the fmeca skill" and it should return the same report.
    }
    ```
 
-   For the binary use `"command": "fmeca-mcp"` and `"args": []`. For Docker use
+   For the binary use `"command": "fmeca-mcp"` and `"args": []`. For Docker
+   (without a mount, so state is lost when the container exits) use
    `"command": "docker"` and
    `"args": ["run", "-i", "--rm", "-e", "OPENROUTER_API_KEY", "ghcr.io/praxec/fmeca:0.1.0"]`.
 
@@ -180,9 +185,35 @@ For the binary use `"command": "fmeca-mcp"` and `"args": []`. For Docker use
 the state is lost when the container exits (see
 [Keep analyses in your repo](#keep-analyses-in-your-repo-fmeca)).
 
-Desktop does not expand `${...}` in this file, so no key is configured and `vet`
-reports `vet_unavailable`. Everything else works. To use `vet`, use a client
-that passes your environment through, such as Claude Code.
+Desktop's documentation does not describe `${...}` expansion in this file; do
+not rely on it. Without a key, `vet` reports `vet_unavailable` and everything
+else works. To give `vet` a key without writing it into the config, make the
+`command` a small script you own, outside any repository, that reads the key from
+your OS keychain (or a `0600` file outside any repo) and then runs `fmeca-mcp`.
+
+macOS or Linux (`~/bin/fmeca-desktop.sh`, `chmod 700`; on Linux replace the
+`security` line with your secret store, for example `secret-tool lookup`):
+
+```sh
+#!/bin/sh
+OPENROUTER_API_KEY="$(security find-generic-password -s fmeca-openrouter -w)" || unset OPENROUTER_API_KEY
+export OPENROUTER_API_KEY
+exec fmeca-mcp
+```
+
+Windows (`fmeca-desktop.ps1`, key stored in Credential Manager, here read with
+the CredentialManager module):
+
+```powershell
+$env:OPENROUTER_API_KEY = (Get-StoredCredential -Target fmeca-openrouter).GetNetworkCredential().Password
+& fmeca-mcp
+```
+
+Then point Desktop at the script: `"command": "/Users/you/bin/fmeca-desktop.sh"`
+with `"args": []` (on Windows, `"command": "powershell"` with
+`"args": ["-NoProfile", "-File", "C:\\Users\\you\\fmeca-desktop.ps1"]`).
+Putting a literal key in `claude_desktop_config.json` is your own choice and is
+not recommended.
 
 ## Codex
 
@@ -237,7 +268,8 @@ that passes your environment through, such as Claude Code.
        "fmeca": {
          "type": "stdio",
          "command": "npx",
-         "args": ["-y", "@matthew-cochran/fmeca"]
+         "args": ["-y", "@matthew-cochran/fmeca"],
+         "env": { "OPENROUTER_API_KEY": "${env:OPENROUTER_API_KEY}" }
        }
      }
    }
@@ -246,7 +278,9 @@ that passes your environment through, such as Claude Code.
    For the binary use `"command": "fmeca-mcp"` and `"args": []`. For Docker use
    `"command": "docker"` and
    `"args": ["run", "-i", "--rm", "-e", "OPENROUTER_API_KEY", "ghcr.io/praxec/fmeca:0.1.0"]`.
-   The key is inherited from the environment Cursor was started in.
+   Cursor expands `${env:NAME}` in the `env` block, which also works when Cursor
+   is started from the Dock or Start menu and so does not inherit shell
+   variables. Omit the `env` line if you do not use `vet`.
 
 3. Enable `fmeca` under Settings, MCP, then [verify](#verify-any-install).
 
@@ -386,13 +420,13 @@ A container only sees `.fmeca/` if the project is mounted. Use this as the
 in-repo variant:
 
 ```sh
-docker run -i --rm -v "$PWD:/work" -w /work -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
+docker run -i --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
 ```
 
 The `-w /work` makes the project root the working directory, so the server finds
 `.fmeca/` as above. **Without the mount, state goes to the container's own user
-directory and is lost when the container exits.** The container runs as a
-non-root user (uid 10001), so the mounted folder must be writable by that user.
+directory and is lost when the container exits.** `--user` runs the container as you, so the files it
+writes to `.fmeca/` are owned by you rather than by the image's own user.
 
 ### Levels and skills
 

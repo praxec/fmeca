@@ -10,7 +10,7 @@ use fmeca_mcp::cli;
 use serde_json::Value;
 
 const KEY_VAR: &str = "OPENROUTER_API_KEY";
-const KEY_REFERENCE: &str = "${OPENROUTER_API_KEY}";
+const KEY_REFERENCES: [&str; 2] = ["${OPENROUTER_API_KEY}", "${env:OPENROUTER_API_KEY}"];
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -138,7 +138,10 @@ fn json_snippets_pass_the_key_only_as_an_env_reference() {
             values_of(KEY_VAR, &parsed, &mut values);
         }
     }
-    let literal: Vec<String> = values.into_iter().filter(|v| v != KEY_REFERENCE).collect();
+    let literal: Vec<String> = values
+        .into_iter()
+        .filter(|v| !KEY_REFERENCES.contains(&v.as_str()))
+        .collect();
     assert!(literal.is_empty(), "OPENROUTER_API_KEY set to {literal:?}");
 }
 
@@ -156,20 +159,21 @@ fn toml_snippets_never_assign_the_key_a_value() {
 }
 
 #[test]
-fn shell_snippets_never_assign_the_key_a_value() {
-    let assigned: Vec<String> = documents()
+fn shell_snippets_assign_the_key_only_from_a_substitution() {
+    let assignment = format!("{KEY_VAR}=");
+    let literal: Vec<String> = documents()
         .into_iter()
         .flat_map(|(name, text)| {
             text.lines()
-                .filter(|line| line.contains(&format!("{KEY_VAR}=")))
-                .map(|line| format!("{name}: {line}"))
+                .filter_map(|line| {
+                    let value = line.split_once(&assignment)?.1;
+                    let value = value.trim_start_matches('"');
+                    (!value.starts_with('$')).then(|| format!("{name}: {line}"))
+                })
                 .collect::<Vec<_>>()
         })
         .collect();
-    assert!(
-        assigned.is_empty(),
-        "key assigned in a command: {assigned:?}"
-    );
+    assert!(literal.is_empty(), "key assigned a literal: {literal:?}");
 }
 
 /// Every `--target <value>` in `text`, skipping `<placeholder>` words.
