@@ -7,7 +7,7 @@
 //!     registry of component ids.
 //!  2. Compute each failure mode's raw criticality, best residual criticality,
 //!     and discrete [`FailureModeStanding`].
-//!  3. Run the detectors ([`crate::detect`]) to produce issues + signals, then
+//!  3. Run the detectors (`crate::detect`) to produce issues + signals, then
 //!     the readiness gate ([`crate::readiness`]).
 //!
 //! Residual rule: the **best (lowest-criticality)** residual among a

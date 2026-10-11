@@ -1,0 +1,25 @@
+# Supply-chain policy for the fmeca workspace (praxec/fmeca).
+#
+# The license allow-list is exactly the set reported for the current tree by
+# `cargo deny list -l crate`. No GPL-family license is permitted.
+
+[advisories]
+yanked = "deny"
+unmaintained = "workspace"
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
