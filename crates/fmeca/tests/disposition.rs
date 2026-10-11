@@ -120,3 +120,17 @@ fn disposition_history_keeps_every_change() {
         3
     );
 }
+
+#[test]
+fn excluded_failure_mode_raises_no_issues() {
+    let (engine, _d) = unmitigated_session();
+    exclude(&engine);
+    assert!(engine.state("s").unwrap().issues.is_empty());
+}
+
+#[test]
+fn excluded_failure_mode_raises_no_signals() {
+    let (engine, _d) = unmitigated_session();
+    exclude(&engine);
+    assert!(engine.state("s").unwrap().signals.is_empty());
+}

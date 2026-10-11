@@ -23,7 +23,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Kernel: failure-mode disposition. `Engine::set_failure_mode_disposition`
   records `open | accepted | excluded`. Accepted risks need an approver and
   stop blocking the gates. Excluded failure modes need non-note evidence and
-  leave `risk.next`, the buckets and the gates. Every change is kept in
+  leave `risk.next`, the buckets and the gates, and raise no issues or
+  signals. Every change is kept in
   `disposition_history`.
 - Kernel: three-level effects (`local_effect` and `next_effect`; the existing
   `effect` is the end effect) and `single_point`, which feeds the new

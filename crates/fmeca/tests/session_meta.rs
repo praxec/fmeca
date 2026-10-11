@@ -77,7 +77,41 @@ fn failure_mode_parent_must_exist() {
         session_id: "s".to_string(),
         failure_mode_id: "fm-x".to_string(),
     });
-    assert!(engine.add_failure_mode("s", fm).is_err());
+    let err = engine.add_failure_mode("s", fm).unwrap_err();
+    assert!(
+        matches!(err, fmeca::FmecaError::InvalidFailureMode(ref m) if m.contains("parent failure mode not found"))
+    );
+}
+
+#[test]
+fn failure_mode_parent_in_other_session_is_accepted() {
+    let (engine, _d) = temp_engine();
+    engine.open_session("p").unwrap();
+    engine
+        .add_failure_mode("p", failure_mode("p", "fm-p", High, High))
+        .unwrap();
+    engine.open_session("c").unwrap();
+    let mut fm = failure_mode("c", "fm-c", High, High);
+    fm.parent = Some(ParentRef {
+        session_id: "p".to_string(),
+        failure_mode_id: "fm-p".to_string(),
+    });
+    assert!(engine.add_failure_mode("c", fm).is_ok());
+}
+
+#[test]
+fn existing_parent_session_is_accepted() {
+    let (engine, _d) = temp_engine();
+    engine.open_session("p").unwrap();
+    let child = SessionMeta {
+        parent: Some("p".to_string()),
+        ..SessionMeta::default()
+    };
+    assert!(
+        engine
+            .open_session_with_meta("c", MatrixStrategy::default(), child)
+            .is_ok()
+    );
 }
 
 #[test]

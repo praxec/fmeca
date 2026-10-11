@@ -49,8 +49,13 @@ pub(crate) fn compute_signals(
 ) -> Vec<Signal> {
     let mut signals = Vec::new();
 
-    // notify: any High/Medium *raw* criticality failure mode exists.
-    for fmv in failure_modes {
+    // notify: any High/Medium *raw* criticality failure mode exists. Excluded
+    // failure modes are not credible and raise no signal (their issues are
+    // already filtered out by the detectors).
+    for fmv in failure_modes
+        .iter()
+        .filter(|fmv| fmv.disposition != Disposition::Excluded)
+    {
         if matches!(fmv.criticality, Some(Level::High) | Some(Level::Medium)) {
             let level = match fmv.criticality {
                 Some(Level::High) => "High",

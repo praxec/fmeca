@@ -12,9 +12,11 @@
 //!    when no `prevention`/`detection` exists (prevention preferred).
 //!  - `residual_still_high` — mitigated, but residual criticality is still
 //!    High/Medium (under-mitigated; drives `remediate`).
+//!
+//! `Excluded` failure modes raise no issue.
 
 use crate::model::Issue;
-use crate::model::{FailureModeStanding, IssueType, Level, MitigationKind};
+use crate::model::{Disposition, FailureModeStanding, IssueType, Level, MitigationKind};
 use crate::projection::{FailureModeView, MitigationView};
 
 /// The output of running every detector over the projection.
@@ -28,7 +30,12 @@ pub(crate) struct DetectionOutput {
 /// order.
 pub(crate) fn detect(failure_modes: &[FailureModeView]) -> DetectionOutput {
     let mut issues = Vec::new();
-    for fmv in failure_modes {
+    // Excluded failure modes are "not credible" (spec §6.6.2): they must not
+    // raise issues that tell the caller to work on them.
+    for fmv in failure_modes
+        .iter()
+        .filter(|fmv| fmv.disposition != Disposition::Excluded)
+    {
         detect_one(fmv, &mut issues);
     }
     DetectionOutput { issues }
