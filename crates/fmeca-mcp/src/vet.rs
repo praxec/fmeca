@@ -43,13 +43,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use fmeca::{
     AnalyzeInput, Axis, Disposition, Domain, FmecaError, FmecaState, MatrixStrategy,
-    MitigationKind, ScoreCriterion, catalog_for,
+    MitigationKind, ScoreCriterion, SessionMeta, catalog_for,
 };
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::jev::{Answer, JudgmentModel, Question, Unavailable, UnavailableReason};
+use crate::jev::{Answer, JudgmentModel, Question, Unavailable, UnavailableReason, Usage};
 
 /// Questions sent when the caller does not pass `max_questions`.
 pub const DEFAULT_MAX_QUESTIONS: usize = 40;
@@ -122,6 +122,9 @@ pub struct VetAnalysis {
 pub struct VetSubject {
     /// The strategy whose catalog the observations come from.
     pub strategy: MatrixStrategy,
+    /// The session's analysis metadata (level, aspect, …); empty for a
+    /// one-shot analysis.
+    pub meta: SessionMeta,
     /// The failure modes, sorted by id, without excluded ones.
     pub failure_modes: Vec<SubjectFailureMode>,
     /// The kernel's readiness gate, echoed verbatim.
@@ -214,6 +217,7 @@ pub fn subject_from_state(state: &FmecaState) -> VetSubject {
     failure_modes.sort_by(|a, b| a.id.cmp(&b.id));
     VetSubject {
         strategy: state.matrix_strategy,
+        meta: state.meta.clone(),
         failure_modes,
         readiness_gate: serde_json::to_value(&state.readiness).unwrap_or(Value::Null),
     }
@@ -247,6 +251,7 @@ pub fn subject_from_analysis(
     failure_modes.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(VetSubject {
         strategy,
+        meta: SessionMeta::default(),
         failure_modes,
         readiness_gate: json!({ "ready": report.ready, "blockers": report.blockers }),
     })
@@ -258,8 +263,9 @@ fn sorted_mitigations(ms: impl Iterator<Item = SubjectMitigation>) -> Vec<Subjec
     ms
 }
 
-/// The state sent to Jev: the failure modes with their claimed observations
-/// (id, axis and catalog description) and their mitigations.
+/// The state sent to Jev: the session's metadata (level, aspect, …), the
+/// failure modes with their claimed observations (id, axis and catalog
+/// description) and their mitigations.
 pub fn subject_state(subject: &VetSubject) -> Value {
     let catalog = catalog_for(subject.strategy);
     let observations = |ids: &[String]| -> Vec<Value> {
@@ -293,7 +299,11 @@ pub fn subject_state(subject: &VetSubject) -> Value {
             })
         })
         .collect();
-    json!({ "matrix_strategy": subject.strategy, "failure_modes": failure_modes })
+    json!({
+        "matrix_strategy": subject.strategy,
+        "meta": subject.meta,
+        "failure_modes": failure_modes,
+    })
 }
 
 fn criterion<'a>(catalog: &'a [ScoreCriterion], id: &str) -> Option<&'a ScoreCriterion> {
@@ -371,14 +381,20 @@ pub fn plan_questions(subject: &VetSubject, checks: &[&str]) -> Vec<Planned> {
         ));
     }
     if wants(CHECK_COVERAGE) {
+        let at_level = subject
+            .meta
+            .level
+            .and_then(|level| serde_json::to_value(level).ok())
+            .and_then(|level| level.as_str().map(|l| format!(" at the {l} level")))
+            .unwrap_or_default();
         for class in FAILURE_CLASSES {
             drafts.push((
                 CHECK_COVERAGE,
                 format!("coverage/{class}"),
                 PlannedKind::Coverage,
                 score(format!(
-                    "Does the class '{class}' plausibly apply to this analysis but is not \
-                     covered by any failure mode?"
+                    "Does the class '{class}' plausibly apply to this analysis{at_level} but \
+                     is not covered by any failure mode?"
                 )),
             ));
         }
@@ -560,7 +576,7 @@ pub async fn run_vet_with(
         .collect();
     let gate = subject.readiness_gate;
     if planned.is_empty() {
-        return ok_report(None, None, gate, Vec::new(), skipped, 0);
+        return ok_report(None, None, None, gate, Vec::new(), skipped, 0);
     }
     let judge = match judge {
         Ok(judge) => judge,
@@ -592,6 +608,7 @@ pub async fn run_vet_with(
     let sent = planned.len();
     ok_report(
         Some(decisions.model),
+        decisions.usage.as_ref(),
         decisions.cost,
         gate,
         findings,
@@ -602,6 +619,7 @@ pub async fn run_vet_with(
 
 fn ok_report(
     model: Option<String>,
+    usage: Option<&Usage>,
     cost: Option<f64>,
     readiness_gate: Value,
     findings: Vec<Value>,
@@ -611,12 +629,24 @@ fn ok_report(
     json!({
         "status": "ok",
         "model": model,
-        "usage": { "cost": cost },
+        "usage": usage_report(usage, cost),
         "readiness_gate": readiness_gate,
         "findings": findings,
         "skipped": skipped,
         "questions_sent": questions_sent,
     })
+}
+
+/// `usage` as reported: the token counts the provider gave, beside `cost`
+/// (the USD number, `null` when unknown). The provider's own `cost` object is
+/// replaced by that number.
+fn usage_report(usage: Option<&Usage>, cost: Option<f64>) -> Value {
+    let mut report = match usage.and_then(|u| serde_json::to_value(u).ok()) {
+        Some(Value::Object(counts)) => counts,
+        _ => Map::new(),
+    };
+    report.insert("cost".into(), json!(cost));
+    Value::Object(report)
 }
 
 /// The `vet_unavailable` report for `unavailable`, with the gate beside it.
@@ -724,6 +754,7 @@ mod tests {
         .unwrap_or_default();
         subject_from_analysis(MatrixStrategy::default(), &fms).unwrap_or(VetSubject {
             strategy: MatrixStrategy::default(),
+            meta: SessionMeta::default(),
             failure_modes: Vec::new(),
             readiness_gate: Value::Null,
         })

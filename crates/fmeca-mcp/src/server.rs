@@ -10,14 +10,15 @@
 //!
 //! | Tool               | Kind    | Engine method                  |
 //! |--------------------|---------|--------------------------------|
-//! | `session.open`     | command | [`Engine::open_session`]       |
-//! | `append`           | command | `add_failure_mode`/`add_mitigation`/`rescore` |
+//! | `session.open`     | command | [`Engine::open_session_with_meta`] |
+//! | `append`           | command | `add_failure_mode`/`add_mitigation`/`rescore`/`set_mitigation_status`/`set_failure_mode_disposition` |
 //! | `state.get`        | query   | [`Engine::state`]              |
 //! | `risk.next`        | query   | [`Engine::risk_next`]          |
 //! | `readiness.assess` | query   | [`Engine::readiness`]          |
 //! | `report.export`    | query   | [`Engine::export`]             |
 //! | `scoring.catalog`  | query   | [`fmeca::catalog`]        |
 //! | `analyze`          | batch   | [`fmeca::analyze()`]      |
+//! | `session.list`     | query   | [`Engine::list_sessions`] + [`Engine::state`] |
 //! | `vet`              | advisory | Jev second opinion (feature `jev`) |
 //!
 //! Errors propagate the kernel's stable prefixes (`SESSION_NOT_FOUND`,
@@ -25,11 +26,13 @@
 //! message.
 
 use std::borrow::Cow;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use fmeca::{
-    AnalyzeInput, Engine, FailureMode, FmecaError, MatrixStrategy, Mitigation, Rescore,
-    ScoreCriterion,
+    AnalysisLevel, AnalyzeInput, Disposition, DispositionChange, Engine, FailureMode,
+    FailureModeStanding, FmecaError, FmecaState, MatrixStrategy, Mitigation, MitigationStatus,
+    MitigationStatusChange, Rescore, ResolutionEvidence, ScoreCriterion, SessionMeta,
 };
 use rmcp::ErrorData as McpError;
 use rmcp::model::{
@@ -55,6 +58,8 @@ pub const TOOL_READINESS_ASSESS: &str = "readiness.assess";
 pub const TOOL_REPORT_EXPORT: &str = "report.export";
 pub const TOOL_SCORING_CATALOG: &str = "scoring.catalog";
 pub const TOOL_ANALYZE: &str = "analyze";
+/// Lists the analyses in the state dir with their metadata and gates.
+pub const TOOL_SESSION_LIST: &str = "session.list";
 /// The advisory Jev tool (feature `jev`): probabilities beside the
 /// deterministic results, never instead of them.
 #[cfg(feature = "jev")]
@@ -73,6 +78,7 @@ pub const TOOL_NAMES: &[&str] = &[
     TOOL_REPORT_EXPORT,
     TOOL_SCORING_CATALOG,
     TOOL_ANALYZE,
+    TOOL_SESSION_LIST,
     #[cfg(feature = "jev")]
     TOOL_VET,
 ];
@@ -87,13 +93,30 @@ struct SessionIdArgs {
 
 /// `session.open` args: a session id plus an OPTIONAL, closed
 /// `matrix_strategy` selection. Defaults to the 3×3 strategy (back-compat). The
-/// caller SELECTS a strategy; it cannot edit cells.
+/// caller SELECTS a strategy; it cannot edit cells. The analysis metadata
+/// (spec §6.2) is optional too and, like the strategy, fixed once opened.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SessionOpenArgs {
     session_id: String,
     #[serde(default)]
     matrix_strategy: MatrixStrategy,
+    title: Option<String>,
+    level: Option<AnalysisLevel>,
+    aspect: Option<String>,
+    #[serde(default)]
+    scope_paths: Vec<String>,
+    parent: Option<String>,
+}
+
+/// `session.list` args: optional filters, each an exact match on the
+/// session's metadata.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SessionListArgs {
+    level: Option<AnalysisLevel>,
+    aspect: Option<String>,
+    parent: Option<String>,
 }
 
 /// The `append` command is a tagged union over its three variants.
@@ -112,6 +135,27 @@ enum AppendArgs {
     Rescore {
         session_id: String,
         rescore: Rescore,
+    },
+    /// Move a mitigation through planned → implemented → verified (or
+    /// abandoned). The server stamps `at`.
+    SetMitigationStatus {
+        session_id: String,
+        mitigation_id: String,
+        status: MitigationStatus,
+        #[serde(default)]
+        evidence: Vec<ResolutionEvidence>,
+        note: Option<String>,
+    },
+    /// Accept a failure mode's residual risk, exclude it as not credible, or
+    /// reopen it. The server stamps `at`.
+    SetFailureModeDisposition {
+        session_id: String,
+        failure_mode_id: String,
+        disposition: Disposition,
+        rationale: String,
+        approver: Option<String>,
+        #[serde(default)]
+        evidence: Vec<ResolutionEvidence>,
     },
 }
 
@@ -156,6 +200,8 @@ struct AnalyzeArgs {
 #[derive(Clone)]
 pub struct FmecaServer {
     engine: Engine,
+    /// The directory the engine's store lives in, reported by `session.list`.
+    state_dir: PathBuf,
     server_name: String,
     server_version: String,
     /// The Jev judge `vet` asks; `None` when no key is configured.
@@ -172,6 +218,7 @@ impl FmecaServer {
     pub fn new(engine: Engine) -> Self {
         Self {
             engine,
+            state_dir: crate::resolve_state_dir(),
             server_name: "fmeca-mcp".to_string(),
             server_version: env!("CARGO_PKG_VERSION").to_string(),
             #[cfg(feature = "jev")]
@@ -193,6 +240,13 @@ impl FmecaServer {
     #[cfg(feature = "jev")]
     pub fn with_judge_unavailable(mut self, unavailable: Option<Unavailable>) -> Self {
         self.judge_unavailable = unavailable;
+        self
+    }
+
+    /// Set the state dir reported by `session.list` (`main` passes the
+    /// resolved one; tests pass their tempdir).
+    pub fn with_state_dir(mut self, state_dir: PathBuf) -> Self {
+        self.state_dir = state_dir;
         self
     }
 
@@ -301,6 +355,7 @@ impl FmecaServer {
             TOOL_REPORT_EXPORT => self.handle_export(args),
             TOOL_SCORING_CATALOG => self.handle_scoring_catalog(args),
             TOOL_ANALYZE => self.handle_analyze(args),
+            TOOL_SESSION_LIST => self.handle_session_list(args),
             #[cfg(feature = "jev")]
             TOOL_VET => Err(McpError::invalid_params(
                 "'vet' is async: call it through call_tool (or call_tool_value)",
@@ -318,11 +373,55 @@ impl FmecaServer {
 
     fn handle_session_open(&self, args: Value) -> Result<Value, McpError> {
         let parsed: SessionOpenArgs = parse_args(args)?;
+        let meta = SessionMeta {
+            title: parsed.title,
+            level: parsed.level,
+            aspect: parsed.aspect,
+            scope_paths: parsed.scope_paths,
+            parent: parsed.parent,
+        };
         let state = self
             .engine
-            .open_session_with(&parsed.session_id, parsed.matrix_strategy)
+            .open_session_with_meta(&parsed.session_id, parsed.matrix_strategy, meta)
             .map_err(engine_error_to_mcp)?;
         to_value(&state)
+    }
+
+    /// `session.list`: one row per analysis in the state dir, sorted by
+    /// session id, filtered on the metadata. A log that fails to replay is a
+    /// row `{session_id, error}` rather than a failed call; such rows are kept
+    /// whatever the filters, since their metadata cannot be read.
+    fn handle_session_list(&self, args: Value) -> Result<Value, McpError> {
+        let parsed: SessionListArgs = parse_args(args)?;
+        let ids = self.engine.list_sessions().map_err(engine_error_to_mcp)?;
+        let mut sessions = Vec::with_capacity(ids.len());
+        for id in ids {
+            match self.engine.state(&id) {
+                Ok(state) => {
+                    let meta = &state.meta;
+                    let keep = parsed.level.is_none_or(|l| meta.level == Some(l))
+                        && parsed
+                            .aspect
+                            .as_ref()
+                            .is_none_or(|a| meta.aspect.as_ref() == Some(a))
+                        && parsed
+                            .parent
+                            .as_ref()
+                            .is_none_or(|p| meta.parent.as_ref() == Some(p));
+                    if keep {
+                        sessions.push(session_row(&state));
+                    }
+                }
+                Err(error) => sessions.push(json!({
+                    "session_id": id,
+                    "error": error.to_string(),
+                })),
+            }
+        }
+        Ok(json!({
+            "state_dir": self.state_dir.display().to_string(),
+            "sessions": sessions,
+        }))
     }
 
     fn handle_append(&self, args: Value) -> Result<Value, McpError> {
@@ -340,6 +439,43 @@ impl FmecaServer {
                 session_id,
                 rescore,
             } => self.engine.rescore(&session_id, rescore),
+            AppendArgs::SetMitigationStatus {
+                session_id,
+                mitigation_id,
+                status,
+                evidence,
+                note,
+            } => {
+                let change = MitigationStatusChange {
+                    session_id: session_id.clone(),
+                    mitigation_id,
+                    status,
+                    evidence,
+                    note,
+                    at: Some(now_rfc3339()?),
+                };
+                self.engine.set_mitigation_status(&session_id, change)
+            }
+            AppendArgs::SetFailureModeDisposition {
+                session_id,
+                failure_mode_id,
+                disposition,
+                rationale,
+                approver,
+                evidence,
+            } => {
+                let change = DispositionChange {
+                    session_id: session_id.clone(),
+                    failure_mode_id,
+                    disposition,
+                    rationale,
+                    approver,
+                    evidence,
+                    at: Some(now_rfc3339()?),
+                };
+                self.engine
+                    .set_failure_mode_disposition(&session_id, change)
+            }
         }
         .map_err(engine_error_to_mcp)?;
         to_value(&state)
@@ -464,6 +600,50 @@ impl ServerHandler for FmecaServer {
 
 // --- helpers ---------------------------------------------------------------
 
+/// The current UTC time in RFC 3339, the `at` stamp on resolution changes.
+/// The kernel never reads a clock; the server does it here.
+fn now_rfc3339() -> Result<String, McpError> {
+    use time::OffsetDateTime;
+    use time::format_description::well_known::Rfc3339;
+    OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .map_err(|e| McpError::internal_error(format!("clock formatting failed: {e}"), None))
+}
+
+/// One `session.list` row for a session that replayed.
+fn session_row(state: &FmecaState) -> Value {
+    let (mut unmitigated, mut under_mitigated, mut acceptable) = (0usize, 0usize, 0usize);
+    for fmv in &state.failure_modes {
+        match fmv.standing {
+            Some(FailureModeStanding::Unmitigated) => unmitigated += 1,
+            Some(FailureModeStanding::UnderMitigated) => under_mitigated += 1,
+            Some(FailureModeStanding::Acceptable) => acceptable += 1,
+            None => {}
+        }
+    }
+    let meta = &state.meta;
+    let readiness = &state.readiness;
+    json!({
+        "session_id": state.session_id,
+        "title": meta.title,
+        "level": meta.level,
+        "aspect": meta.aspect,
+        "scope_paths": meta.scope_paths,
+        "parent": meta.parent,
+        "failure_modes": state.failure_modes.len(),
+        "by_standing": {
+            "unmitigated": unmitigated,
+            "under_mitigated": under_mitigated,
+            "acceptable": acceptable,
+        },
+        "ready": readiness.ready,
+        "ready_verified": readiness.verified.ready,
+        "resolution": readiness.resolution,
+        "critical_items": readiness.critical_items.len(),
+        "accepted_risks": readiness.accepted_risks.len(),
+    })
+}
+
 fn request_args(request: &CallToolRequestParams) -> Value {
     request
         .arguments
@@ -521,9 +701,12 @@ pub fn tool_definitions() -> Vec<Tool> {
                 "Start or resume a session by session_id. Optional matrix_strategy SELECTS the \
                  criticality matrix (closed set: qualitative3x3 (default) | nasa8004_5x5); a \
                  session's strategy is fixed once opened, and you SELECT it — you cannot edit its \
-                 cells. Returns the current FmecaState including matrix_strategy, matrix_scale, \
-                 the active scoring_catalog, the component registry, computed criticality, \
-                 signals, and readiness.",
+                 cells. Optional analysis metadata, also fixed once opened: title, level \
+                 (concept|conops|technical_plan|project_plan|implementation|verification), \
+                 aspect, scope_paths[] and parent (an existing session id). Convention: \
+                 session_id = <aspect>-<level>. Returns the current FmecaState including meta, \
+                 matrix_strategy, matrix_scale, the active scoring_catalog, the component \
+                 registry, computed criticality, signals, and readiness.",
             ),
             session_open_schema(),
         ),
@@ -533,27 +716,21 @@ pub fn tool_definitions() -> Vec<Tool> {
                 "Append one event. Tagged by `variant`: \
                  add_failure_mode{session_id, failure_mode} | \
                  add_mitigation{session_id, mitigation} | \
-                 rescore{session_id, rescore}. \
+                 rescore{session_id, rescore} | \
+                 set_mitigation_status{session_id, mitigation_id, status \
+                 (planned|implemented|verified|abandoned), evidence?[]{kind, reference, basis?}, \
+                 note?} (verified needs evidence whose kind is not note) | \
+                 set_failure_mode_disposition{session_id, failure_mode_id, disposition \
+                 (open|accepted|excluded), rationale, approver?, evidence?[]} (accepted needs an \
+                 approver; excluded needs evidence whose kind is not note). The server stamps \
+                 `at` on status and disposition changes. Never delete a failure mode: exclude it. \
                  A failure_mode / rescore supplies severity_observations + \
                  probability_observations, and a mitigation supplies \
                  residual_severity_observations + residual_probability_observations \
                  (all ids from scoring.catalog) — NOT a score; the engine derives every level. \
                  Returns the recomputed FmecaState with freshly-computed criticality + signals.",
             ),
-            schema_object(json!({
-                "type": "object",
-                "properties": {
-                    "variant": {
-                        "type": "string",
-                        "enum": ["add_failure_mode", "add_mitigation", "rescore"]
-                    },
-                    "session_id": { "type": "string" },
-                    "failure_mode": { "type": "object" },
-                    "mitigation": { "type": "object" },
-                    "rescore": { "type": "object" }
-                },
-                "required": ["variant", "session_id"]
-            })),
+            append_schema(),
         ),
         Tool::new(
             Cow::Borrowed(TOOL_STATE_GET),
@@ -623,6 +800,20 @@ pub fn tool_definitions() -> Vec<Tool> {
             ),
             analyze_schema(),
         ),
+        Tool::new(
+            Cow::Borrowed(TOOL_SESSION_LIST),
+            Cow::Borrowed(
+                "List the analyses in the state dir (the project's .fmeca/ when there is one). \
+                 Optional exact-match filters: level, aspect, parent. Returns {state_dir, \
+                 sessions[]} sorted by session_id; each row is {session_id, title, level, \
+                 aspect, scope_paths, parent, failure_modes (count), by_standing{unmitigated, \
+                 under_mitigated, acceptable}, ready, ready_verified, resolution{planned, \
+                 implemented, verified, abandoned}, critical_items (count), accepted_risks \
+                 (count)}. A log that fails to replay is listed as {session_id, error} instead \
+                 of failing the call (such rows are kept whatever the filters).",
+            ),
+            session_list_schema(),
+        ),
         #[cfg(feature = "jev")]
         Tool::new(
             Cow::Borrowed(TOOL_VET),
@@ -688,6 +879,16 @@ fn session_id_schema() -> Arc<rmcp::model::JsonObject> {
 /// The closed set of selectable matrix-strategy ids.
 const MATRIX_STRATEGY_IDS: [&str; 2] = ["qualitative3x3", "nasa8004_5x5"];
 
+/// The closed set of analysis levels (spec §6.2), in order.
+const ANALYSIS_LEVELS: [&str; 6] = [
+    "concept",
+    "conops",
+    "technical_plan",
+    "project_plan",
+    "implementation",
+    "verification",
+];
+
 fn session_open_schema() -> Arc<rmcp::model::JsonObject> {
     schema_object(json!({
         "type": "object",
@@ -698,10 +899,126 @@ fn session_open_schema() -> Arc<rmcp::model::JsonObject> {
                 "enum": MATRIX_STRATEGY_IDS,
                 "description": "Optional. Selects the criticality matrix; default qualitative3x3. \
                                 Fixed once the session is opened."
+            },
+            "title": { "type": "string", "description": "Optional. A human title for the analysis." },
+            "level": {
+                "type": "string",
+                "enum": ANALYSIS_LEVELS,
+                "description": "Optional. The level of this analysis."
+            },
+            "aspect": {
+                "type": "string",
+                "description": "Optional. What is analysed, e.g. checkout."
+            },
+            "scope_paths": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Optional. Repo paths this analysis covers."
+            },
+            "parent": {
+                "type": "string",
+                "description": "Optional. The parent session id (must exist), e.g. a technical plan's conops."
             }
         },
         "required": ["session_id"],
         "additionalProperties": false
+    }))
+}
+
+fn session_list_schema() -> Arc<rmcp::model::JsonObject> {
+    schema_object(json!({
+        "type": "object",
+        "properties": {
+            "level": {
+                "type": "string",
+                "enum": ANALYSIS_LEVELS,
+                "description": "Optional. Only analyses at this level."
+            },
+            "aspect": { "type": "string", "description": "Optional. Only analyses of this aspect." },
+            "parent": { "type": "string", "description": "Optional. Only children of this session id." }
+        },
+        "additionalProperties": false
+    }))
+}
+
+/// One resolution evidence item: where it is and, optionally, why it counts.
+fn evidence_schema() -> Value {
+    json!({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": ["commit", "pull_request", "test", "file", "url", "note"]
+                },
+                "reference": { "type": "string" },
+                "basis": {
+                    "type": "string",
+                    "enum": ["design", "test", "inspection", "failure_history", "operational_use"]
+                }
+            },
+            "required": ["kind", "reference"]
+        }
+    })
+}
+
+/// The `append` envelope: one flat object (no top-level `oneOf`) whose
+/// `variant` decides which other keys apply. The kernel validates the deep
+/// shapes and returns the stable error prefixes.
+fn append_schema() -> Arc<rmcp::model::JsonObject> {
+    schema_object(json!({
+        "type": "object",
+        "properties": {
+            "variant": {
+                "type": "string",
+                "enum": [
+                    "add_failure_mode",
+                    "add_mitigation",
+                    "rescore",
+                    "set_mitigation_status",
+                    "set_failure_mode_disposition"
+                ]
+            },
+            "session_id": { "type": "string" },
+            "failure_mode": {
+                "type": "object",
+                "description": "add_failure_mode. Besides the core fields: optional local_effect, next_effect (effect is the end effect), single_point, parent{session_id, failure_mode_id} and refs[].",
+                "properties": {
+                    "local_effect": { "type": "string" },
+                    "next_effect": { "type": "string" },
+                    "single_point": { "type": "boolean" },
+                    "parent": {
+                        "type": "object",
+                        "properties": {
+                            "session_id": { "type": "string" },
+                            "failure_mode_id": { "type": "string" }
+                        },
+                        "required": ["session_id", "failure_mode_id"]
+                    },
+                    "refs": { "type": "array", "items": { "type": "string" } }
+                }
+            },
+            "mitigation": { "type": "object" },
+            "rescore": { "type": "object" },
+            "mitigation_id": { "type": "string", "description": "set_mitigation_status." },
+            "status": {
+                "type": "string",
+                "enum": ["planned", "implemented", "verified", "abandoned"],
+                "description": "set_mitigation_status. verified needs evidence whose kind is not note."
+            },
+            "note": { "type": "string", "description": "set_mitigation_status. Optional." },
+            "failure_mode_id": { "type": "string", "description": "set_failure_mode_disposition." },
+            "disposition": {
+                "type": "string",
+                "enum": ["open", "accepted", "excluded"],
+                "description": "set_failure_mode_disposition. accepted needs an approver; excluded needs evidence whose kind is not note."
+            },
+            "rationale": { "type": "string", "description": "set_failure_mode_disposition. Required, non-empty." },
+            "approver": { "type": "string", "description": "set_failure_mode_disposition. Required for accepted." },
+            "evidence": evidence_schema()
+        },
+        "required": ["variant", "session_id"]
     }))
 }
 
@@ -828,10 +1145,12 @@ gap detection (notify/clarify/remediate signals), a readiness gate, and report e
 Criticality, residual, and standing are COMPUTED (a pure fold over an append-only
 log), never stored. No LLM, no network in the kernel.
 
-Tools (eight; command/query split + one stateless batch; plus the advisory vet below):
+Tools (the eight core tools: command/query split + one stateless batch; plus session.list):
   session.open      — start/resume a session; optional matrix_strategy SELECTS the matrix;
-                      returns FmecaState (incl. matrix_strategy, matrix_scale, scoring_catalog)
-  append            — variant add_failure_mode | add_mitigation | rescore; returns state + signals
+                      optional title, level, aspect, scope_paths, parent (fixed once opened);
+                      returns FmecaState (incl. meta, matrix_strategy, matrix_scale, scoring_catalog)
+  append            — variant add_failure_mode | add_mitigation | rescore | set_mitigation_status |
+                      set_failure_mode_disposition; returns state + signals
   state.get         — read-only FmecaState projection (incl. matrix_strategy + scoring_catalog)
   risk.next         — highest-criticality unmitigated failure mode (or {risk: null})
   readiness.assess  — ReadinessReport (ready iff all scored + no residual High/Medium +
@@ -844,6 +1163,15 @@ Tools (eight; command/query split + one stateless batch; plus the advisory vet b
                       computed report (per-FM criticality/residual/standing/response_class +
                       issues, risk_ranking, ready, blockers). No session, no persistence —
                       deterministic + idempotent, same compute as the session path.
+  session.list      — every analysis in the state dir with its metadata, standing counts,
+                      ready, ready_verified and resolution counts (filters: level, aspect, parent)
+
+PROJECT STORE AND RESOLUTION:
+  Analyses live in the project's .fmeca/ folder, one <session_id>.jsonl per analysis.
+  Use session.list to find them before opening a new one.
+  Track resolution with append set_mitigation_status (planned → implemented → verified, with evidence).
+  Record risk acceptance or a not-credible exclusion with append set_failure_mode_disposition.
+  Never delete a failure mode.
 
 MATRIX STRATEGY: the criticality matrix is a SWAPPABLE, CLOSED strategy you
 SELECT per session at session.open via matrix_strategy — you NEVER edit its cells:
@@ -880,3 +1208,13 @@ EvidenceRef{turn_id}. Errors carry stable prefixes: SESSION_NOT_FOUND, BAD_SESSI
 INVALID_FAILURE_MODE, INVALID_MITIGATION, INVALID_RESCORE, INVALID_OBSERVATION,
 FM_NOT_FOUND, DUPLICATE_ID, STORE_ERROR.
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn base_instructions_do_not_mention_vet() {
+        assert!(!BASE_INSTRUCTIONS.to_lowercase().contains("vet"));
+    }
+}

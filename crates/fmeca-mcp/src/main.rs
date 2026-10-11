@@ -66,7 +66,7 @@ fn serve() -> anyhow::Result<()> {
     tracing::info!(?state_dir, source = ?source, "starting fmeca-mcp stdio server");
     let store = FilesystemStore::new(&state_dir)?;
     let engine = Engine::new(Arc::new(store));
-    let server = with_jev(FmecaServer::new(engine));
+    let server = with_jev(FmecaServer::new(engine).with_state_dir(state_dir));
     tokio::runtime::Runtime::new()?.block_on(server.serve_stdio())
 }
 

@@ -18,10 +18,11 @@ enum Script {
 }
 
 /// A judge that answers every question with a closure, or always fails
-/// with one reason. It records the questions of every call.
+/// with one reason. It records the state and questions of every call.
 pub struct FakeJudge {
     script: Script,
     calls: Mutex<Vec<BTreeMap<String, Question>>>,
+    states: Mutex<Vec<serde_json::Value>>,
 }
 
 impl FakeJudge {
@@ -31,6 +32,7 @@ impl FakeJudge {
         Self {
             script: Script::Answering(Arc::new(f)),
             calls: Mutex::new(Vec::new()),
+            states: Mutex::new(Vec::new()),
         }
     }
 
@@ -39,12 +41,21 @@ impl FakeJudge {
         Self {
             script: Script::Failing(reason),
             calls: Mutex::new(Vec::new()),
+            states: Mutex::new(Vec::new()),
         }
     }
 
     /// The questions of every call so far, oldest first.
     pub fn calls(&self) -> Vec<BTreeMap<String, Question>> {
         self.calls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// The state of every call so far, oldest first.
+    pub fn states(&self) -> Vec<serde_json::Value> {
+        self.states
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -67,9 +78,13 @@ impl std::fmt::Debug for FakeJudge {
 impl JudgmentModel for FakeJudge {
     async fn decide(
         &self,
-        _state: serde_json::Value,
+        state: serde_json::Value,
         questions: BTreeMap<String, Question>,
     ) -> Result<Decisions, Unavailable> {
+        self.states
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(state);
         self.calls
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
