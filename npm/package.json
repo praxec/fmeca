@@ -1,6 +1,6 @@
 {
   "name": "@matthew-cochran/fmeca",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "npx launcher for the fmeca MCP server: downloads the verified release binary for your platform and runs it over stdio.",
   "keywords": [
     "mcp",

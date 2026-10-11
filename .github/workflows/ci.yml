@@ -152,3 +152,21 @@ jobs:
       # once skills/ holds skills it asserts their files too.
       - name: skills install, rerun, uninstall
         run: scripts/skills-smoke.sh target/debug/fmeca-mcp "$RUNNER_TEMP"
+  version-sync:
+    name: version sync
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: every version field agrees with Cargo.toml
+        run: bash scripts/check-version-sync.sh
+  junior-contract:
+    name: junior contract
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - run: cargo build -p fmeca-mcp
+      - name: release wiring and MCP tool surface
+        run: bash scripts/junior-contract-check.sh target/debug/fmeca-mcp
+      - name: negative self-test (renamed target must fail)
+        run: bash scripts/junior-contract-check.test.sh
