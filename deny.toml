@@ -11,6 +11,12 @@ unmaintained = "workspace"
 allow = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
+    # BSD-3-Clause: aws-lc-sys, encoding_rs, subtle (via rig-reqwest/reqwest/rustls, jev feature).
+    "BSD-3-Clause",
+    # CDLA-Permissive-2.0: webpki-root-certs (via reqwest/rustls-platform-verifier, jev feature).
+    "CDLA-Permissive-2.0",
+    # ISC: aws-lc-rs, aws-lc-sys, hyper-rustls, rustls, rustls-native-certs, rustls-webpki, untrusted (jev feature).
+    "ISC",
     "MIT",
     "Unicode-3.0",
     "Unlicense",
