@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- CLI: `fmeca-mcp skills install|uninstall --target <claude|codex|cursor|copilot|gemini|agents-md|all> (--project <dir> | --user)`
+  installs the agent skills embedded in the binary into each tool's official
+  skill and command locations (manifest-tracked, `--dry-run`, `--force`, an OS
+  file lock per root) and prints the MCP registration command without editing
+  any MCP configuration. See `docs/agents/tool-matrix.md`.
 - Kernel (`fmeca`): analysis metadata and links. `SessionMeta` (title, level,
   aspect, scope paths, parent session) is recorded on `SessionOpened`, with
   `AnalysisLevel` covering concept, conops, technical plan, project plan,

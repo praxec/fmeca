@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::Command as ProcessCommand;
 
 use fmeca_mcp::cli::{Command, parse};
+use fmeca_mcp::skills::{InstallArgs, ScopeArg, SkillsCommand, Target};
 
 fn args(items: &[&str]) -> Vec<String> {
     items.iter().map(|s| s.to_string()).collect()
@@ -44,4 +45,32 @@ fn version_flag_prints_package_version() {
         String::from_utf8(output.stdout).unwrap(),
         format!("fmeca-mcp {}\n", env!("CARGO_PKG_VERSION"))
     );
+}
+
+#[test]
+fn skills_install_target_claude_parses() {
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().to_str().unwrap();
+    assert_eq!(
+        parse(&args(&[
+            "skills",
+            "install",
+            "--target",
+            "claude",
+            "--project",
+            project
+        ]))
+        .unwrap(),
+        Command::Skills(SkillsCommand::Install(InstallArgs {
+            target: Target::Claude,
+            scope: ScopeArg::Project(dir.path().to_path_buf()),
+            dry_run: false,
+            force: false,
+        }))
+    );
+}
+
+#[test]
+fn skills_install_unknown_target_is_usage_error() {
+    assert!(parse(&args(&["skills", "install", "--target", "emacs", "--user"])).is_err());
 }

@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+rust-version = "1.89"
+build = "build.rs"
+include = ["src/**", "tests/**", "examples/**", "skills/**", "build.rs", "README.md"]
 description = "Stdio MCP server wrapping the fmeca kernel: a deterministic, offline structured-FMECA engine exposed as a command/query MCP tool surface."
 keywords = ["mcp", "fmeca", "risk", "failure-modes", "analysis"]
 categories = ["development-tools", "command-line-utilities"]
@@ -24,7 +27,7 @@ default = ["jev"]
 # `rustls` feature, which would pick reqwest's aws-lc default, and reqwest
 # gets `rustls-no-provider`; `jev::client` installs ring before building a
 # client.
-jev = ["dep:rig-core", "dep:rig-typesafeai", "dep:rig-reqwest", "dep:reqwest", "dep:rustls", "dep:async-trait", "dep:sha2"]
+jev = ["dep:rig-core", "dep:rig-typesafeai", "dep:rig-reqwest", "dep:reqwest", "dep:rustls", "dep:async-trait"]
 # Exposes `jev::fake::FakeJudge` to integration tests and dependants.
 test-fakes = ["jev"]
 
@@ -43,8 +46,11 @@ rig-reqwest = { version = "0.44", default-features = false, optional = true }
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "charset", "http2", "system-proxy"], optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"], optional = true }
 async-trait = { version = "0.1", optional = true }
-# `vet` question hashes (sha256 of canonical JSON).
-sha2 = { version = "0.10", optional = true }
+# sha256: `vet` question hashes and skills-install manifest digests / lock names.
+sha2 = "0.10"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [[example]]
 name = "jev_openrouter_smoke"
@@ -54,3 +60,4 @@ required-features = ["jev"]
 tempfile = "3"
 wiremock = "0.6"
 async-trait = "0.1"
+toml = "1"

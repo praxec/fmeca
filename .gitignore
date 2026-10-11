@@ -30,3 +30,6 @@ target
 /.claude/skills/.junior-manifest.json
 /.agents/skills/junior/
 /.agents/skills/.junior-manifest.json
+
+# Copy of the workspace skills/ made by CI before `cargo package` (see CONTRIBUTING).
+/crates/fmeca-mcp/skills/

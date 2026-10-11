@@ -13,6 +13,7 @@ pub mod config;
 pub mod jev;
 pub mod project;
 pub mod server;
+pub mod skills;
 #[cfg(feature = "jev")]
 pub mod vet;
 
