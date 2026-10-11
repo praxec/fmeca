@@ -663,7 +663,7 @@ fn vet_schema() -> Arc<rmcp::model::JsonObject> {
             "checks": {
                 "type": "array",
                 "items": { "type": "string", "enum": crate::vet::CHECKS },
-                "description": "Optional. Which checks to run; default all four, asked in this order."
+                "description": "Optional. Which checks to run; default all four. Readiness and coverage are always asked before the per-failure-mode checks."
             },
             "max_questions": {
                 "type": "integer",

@@ -314,6 +314,30 @@ async fn vet_lists_unsent_questions_as_skipped() {
 }
 
 #[tokio::test]
+async fn cap_never_starves_readiness_and_coverage() {
+    let judge = fake(0.5, 2.0, "detection");
+    let (srv, _d) = judged(judge.clone());
+    let fms: Vec<fmeca::AnalyzeInput> =
+        serde_json::from_value(analysis(60, 3)["analysis"]["failure_modes"].clone()).unwrap();
+    let subject = subject_from_analysis(MatrixStrategy::default(), &fms).unwrap();
+    let analysis_level: Vec<String> = plan_questions(&subject, &["coverage", "readiness"])
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    srv.vet(analysis(60, 3)).await.unwrap();
+    let sent = judge.calls()[0].clone();
+    assert!(analysis_level.iter().all(|id| sent.contains_key(id)));
+}
+
+#[test]
+fn analysis_level_questions_come_first() {
+    let fms: Vec<fmeca::AnalyzeInput> =
+        serde_json::from_value(analysis(3, 2)["analysis"]["failure_modes"].clone()).unwrap();
+    let subject = subject_from_analysis(MatrixStrategy::default(), &fms).unwrap();
+    assert_eq!(plan_questions(&subject, &CHECKS)[0].target, "readiness");
+}
+
+#[tokio::test]
 async fn vet_with_zero_max_questions_skips_everything() {
     let judge = fake(0.5, 2.0, "detection");
     let (srv, _d) = judged(judge.clone());

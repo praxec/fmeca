@@ -25,11 +25,13 @@
 //!
 //! # Order and cap
 //!
-//! Questions are planned failure mode by failure mode (sorted by id), each in
-//! [`CHECKS`] order, followed by the analysis-wide coverage and readiness
-//! questions. The first `max_questions` are sent; the rest are listed in
-//! `skipped` by hash. Ask for `checks: ["coverage", "readiness"]` to put the
-//! analysis-wide questions first in a large analysis.
+//! The analysis-wide questions are planned first, so the cap never starves
+//! them: readiness (one question), then coverage (one per
+//! [`FAILURE_CLASSES`] entry, in that order). Then come the per-failure-mode
+//! questions, failure mode by failure mode (sorted by id): observations,
+//! then mitigations, each in id order. `checks` filters which are planned.
+//! The first `max_questions` are sent; the rest are listed in `skipped` by
+//! hash. Hashes do not depend on position.
 //!
 //! # Determinism
 //!
@@ -359,15 +361,14 @@ pub fn plan_questions(subject: &VetSubject, checks: &[&str]) -> Vec<Planned> {
     let wants = |check: &str| checks.contains(&check);
     let mut drafts: Vec<(&'static str, String, PlannedKind, Question)> = Vec::new();
 
-    let mut fms: Vec<&SubjectFailureMode> = subject.failure_modes.iter().collect();
-    fms.sort_by(|a, b| a.id.cmp(&b.id));
-    for fm in fms {
-        if wants(CHECK_OBSERVATIONS) {
-            observation_questions(fm, &catalog, &mut drafts);
-        }
-        if wants(CHECK_MITIGATIONS) {
-            mitigation_questions(fm, &mut drafts);
-        }
+    // Analysis-wide questions first, so the cap never starves them.
+    if wants(CHECK_READINESS) {
+        drafts.push((
+            CHECK_READINESS,
+            "readiness".to_string(),
+            PlannedKind::Readiness,
+            score("Is this analysis sound enough to sign off?".to_string()),
+        ));
     }
     if wants(CHECK_COVERAGE) {
         for class in FAILURE_CLASSES {
@@ -382,13 +383,16 @@ pub fn plan_questions(subject: &VetSubject, checks: &[&str]) -> Vec<Planned> {
             ));
         }
     }
-    if wants(CHECK_READINESS) {
-        drafts.push((
-            CHECK_READINESS,
-            "readiness".to_string(),
-            PlannedKind::Readiness,
-            score("Is this analysis sound enough to sign off?".to_string()),
-        ));
+
+    let mut fms: Vec<&SubjectFailureMode> = subject.failure_modes.iter().collect();
+    fms.sort_by(|a, b| a.id.cmp(&b.id));
+    for fm in fms {
+        if wants(CHECK_OBSERVATIONS) {
+            observation_questions(fm, &catalog, &mut drafts);
+        }
+        if wants(CHECK_MITIGATIONS) {
+            mitigation_questions(fm, &mut drafts);
+        }
     }
 
     let mut seen = BTreeSet::new();
