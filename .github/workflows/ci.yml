@@ -85,3 +85,44 @@ jobs:
           cd npm
           npm pack --ignore-scripts
           bash ../scripts/npm-publish.sh ./matthew-cochran-fmeca-*.tgz "$(node -p "require('./package.json').version")" --dry-run
+  kernel-purity:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - name: fmeca kernel has no network deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree="$(cargo tree --locked -p fmeca -e normal)"
+          if grep -E '\b(rig|reqwest)' <<<"$tree"; then
+            echo "::error::fmeca kernel depends on rig/reqwest"
+            exit 1
+          fi
+      - name: server builds without jev
+        run: cargo build -p fmeca-mcp --no-default-features --locked
+  # Builds the release binary for each frozen release.yml target, so a
+  # dependency that breaks a target (C toolchain, cross build) fails a PR
+  # rather than a release. Keep this matrix in step with release.yml's
+  # `binaries` job.
+  release-targets:
+    name: release build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu,  os: ubuntu-22.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm }
+          - { target: x86_64-apple-darwin,        os: macos-15-intel }
+          - { target: aarch64-apple-darwin,       os: macos-15 }
+          - { target: x86_64-pc-windows-msvc,     os: windows-latest }
+          - { target: aarch64-pc-windows-msvc,    os: windows-11-arm }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build --locked --release -p fmeca-mcp --bin fmeca-mcp --target ${{ matrix.target }}
