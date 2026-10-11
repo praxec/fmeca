@@ -30,3 +30,31 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - run: test "${{ needs.test-matrix.result }}" = "success"
+  cargo-deny:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+  docs:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - run: cargo doc --no-deps --locked --workspace
+        env: { RUSTDOCFLAGS: "-D warnings" }
+  package:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - run: cargo package --locked --list -p fmeca
+      - run: cargo publish --dry-run --locked -p fmeca
+      # `fmeca` 0.0.2 is not on crates.io yet, so a `fmeca-mcp` publish
+      # dry-run cannot resolve it (cargo 1.99 resolves during packaging even
+      # with `--no-verify`). Task 3's resolution: verify fmeca-mcp packaging
+      # with `package --list`; #26 restores the full publish dry-run after
+      # `fmeca` is published.
+      - run: cargo package --locked --list -p fmeca-mcp

@@ -12,7 +12,7 @@
 //!
 //! Observation ids are validated against the SELECTED strategy's catalog exactly
 //! as the [`crate::engine::Engine`] does at write time; an unknown id yields
-//! [`FmecaError::InvalidObservation`].
+//! [`crate::FmecaError::InvalidObservation`].
 //!
 //! See the compute-parity test in `tests/analyze.rs`
 //! (`analyze_agrees_with_session_path`) which builds the same FMECA via the
@@ -116,7 +116,7 @@ const ANALYZE_SESSION_ID: &str = "__analyze__";
 /// diverge from the session path.
 ///
 /// Observation ids are validated against `strategy`'s catalog (same rule as the
-/// engine); an unknown id returns [`FmecaError::InvalidObservation`].
+/// engine); an unknown id returns [`crate::FmecaError::InvalidObservation`].
 pub fn analyze(strategy: MatrixStrategy, failure_modes: &[AnalyzeInput]) -> Result<AnalyzeReport> {
     // Validate observations up front, exactly as the engine does at write time,
     // so an unknown id fails fast with the stable INVALID_OBSERVATION prefix

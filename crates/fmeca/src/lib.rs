@@ -24,20 +24,20 @@
 //! - [`scoring`]     — the fixed code-resident evidence→score catalog + the
 //!   observation→Level map (the model never picks a score).
 //! - [`response`]    — the deterministic `response_class` magnitude derivation.
-//! - [`criticality`] — the fixed qualitative S×P matrix (the 3×3 strategy's cells).
-//! - [`matrix`]      — the swappable [`MatrixStrategy`](matrix::MatrixStrategy)
+//! - [`mod@criticality`] — the fixed qualitative S×P matrix (the 3×3 strategy's cells).
+//! - [`matrix`]      — the swappable [`MatrixStrategy`]
 //!   seam: a closed set of fixed matrices selected per session (3×3
 //!   default + NASA GSFC-HDBK-8004 5×5), each with locked cells.
 //! - [`event`]       — the append-only event log line type.
-//! - [`store`]       — the [`StateStore`](store::StateStore) trait + filesystem
+//! - [`store`]       — the [`StateStore`] trait + filesystem
 //!   (JSONL) impl.
-//! - [`projection`]  — the [`FmecaState`](projection::FmecaState) fold + computed
+//! - [`projection`]  — the [`FmecaState`] fold + computed
 //!   criticality/residual/standing.
-//! - [`detect`]      — issue detectors (one per `IssueType`).
+//! - `detect`        — issue detectors (one per `IssueType`).
 //! - [`signal`]      — the three first-class signals + `risk.next`.
 //! - [`readiness`]   — the readiness gate.
 //! - [`export`]      — `report.export`.
-//! - [`engine`]      — the [`Engine`](engine::Engine) tying it together, with the
+//! - [`engine`]      — the [`Engine`] tying it together, with the
 //!   per-session write lock.
 
 pub mod analyze;

@@ -14,7 +14,7 @@
 //!
 //! - [`MatrixStrategy::Qualitative3x3`] — the EXISTING 3-level (Low/Medium/High)
 //!   behaviour, unchanged. The DEFAULT (back-compat). Its `criticality` is the
-//!   historic fixed S×P table in [`crate::criticality`].
+//!   historic fixed S×P table in [`mod@crate::criticality`].
 //! - [`MatrixStrategy::Nasa8004_5x5`] — a 5-level scale per **NASA GSFC-HDBK-8004**:
 //!   consequence/severity `1..=5` and likelihood/probability `1..=5`, with all 25
 //!   `(consequence × likelihood)` cells mapped to a [`Criticality`] bucket

@@ -17,7 +17,7 @@
 //! | `readiness.assess` | query   | [`Engine::readiness`]          |
 //! | `report.export`    | query   | [`Engine::export`]             |
 //! | `scoring.catalog`  | query   | [`fmeca::catalog`]        |
-//! | `analyze`          | batch   | [`fmeca::analyze`]        |
+//! | `analyze`          | batch   | [`fmeca::analyze()`]      |
 //!
 //! Errors propagate the kernel's stable prefixes (`SESSION_NOT_FOUND`,
 //! `INVALID_FAILURE_MODE`, `BAD_SESSION_ID`, …) verbatim in the MCP error
