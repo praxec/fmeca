@@ -86,6 +86,22 @@ fn excluded_failure_mode_leaves_risk_next() {
 }
 
 #[test]
+fn accepted_failure_mode_leaves_risk_next() {
+    let (engine, _d) = unmitigated_session();
+    accept(&engine);
+    assert!(engine.risk_next("s").unwrap().is_none());
+}
+
+#[test]
+fn open_unmitigated_high_is_still_risk_next() {
+    let (engine, _d) = unmitigated_session();
+    assert_eq!(
+        engine.risk_next("s").unwrap().unwrap().failure_mode.id,
+        "fm-1"
+    );
+}
+
+#[test]
 fn excluded_failure_mode_is_kept_in_state() {
     let (engine, _d) = unmitigated_session();
     exclude(&engine);
