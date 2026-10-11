@@ -35,6 +35,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Kernel: `validate_log` reports structural problems in a session log, such as
   the duplicate ids a git union-merge produces. `project` stays total over
   such logs.
+- Server (`fmeca-mcp`): the advisory `vet` tool (feature `jev`, on by
+  default). It asks Jev, a calibrated judgment model on OpenRouter, four kinds
+  of question about a session or a one-shot analysis: do the claimed
+  observations apply (and does the next level up), how fully does each
+  mitigation address its cause and is its declared kind right, which of seven
+  failure classes no failure mode covers, and is the analysis sound enough to
+  sign off. Each answer becomes a finding with its probability, threshold and
+  verdict, beside the unchanged deterministic readiness gate. At most
+  `max_questions` (default 40, hard cap 200) are sent in one call; the rest
+  are listed by deterministic sha256 hash. `vet` never writes, skips excluded
+  failure modes, and without `OPENROUTER_API_KEY` (or with a rejected
+  `FMECA_JEV_*` setting) reports `vet_unavailable` with a reason instead of
+  failing.
 
 ### Changed
 
