@@ -12,6 +12,9 @@ mitigations under a prevent→detect→fail-fast discipline, and tells you wheth
 the analysis is ready to sign off. Any MCP client (Claude Code, Cursor, or a
 custom orchestrator) drives it over the standard protocol.
 
+**For AI agents:** to install the server and its skills for your client, follow
+[docs/AGENT-INSTALL.md](docs/AGENT-INSTALL.md).
+
 ## What is FMECA
 
 **Failure Modes, Effects & Criticality Analysis** is a structured risk-triage
@@ -40,6 +43,16 @@ softer answer.
 
 ## Install
 
+### npx (no install step)
+
+```sh
+npx -y @matthew-cochran/fmeca
+```
+
+The [npm launcher](npm/README.md) downloads the matching release binary,
+verifies its checksum, caches it and runs it. Point your MCP client at that
+command (see [MCP client config](#mcp-client-config)).
+
 ### Prebuilt binary (no Rust, Cargo, or Git required)
 
 ```sh
@@ -61,8 +74,11 @@ Pin a specific release instead of the current latest stable:
 
 ```sh
 curl -fsSL https://github.com/praxec/fmeca/releases/latest/download/install.sh \
-  | sh -s -- --version v0.0.2
+  | sh -s -- --version v0.1.0
 ```
+
+The installers can also be fetched from a specific release, for example
+`https://github.com/praxec/fmeca/releases/download/v0.1.0/install.sh`.
 
 The installer scripts are published as release assets alongside the binaries.
 
@@ -88,9 +104,21 @@ silently cross-compiled.
 
 Re-run the installer to update. Only the binary in the managed install
 directory is replaced (atomically); application state and configuration live
-outside that directory and are never overwritten. State is resolved from
-`FMECA_STATE_DIR`, else `$XDG_DATA_HOME/fmeca-mcp` (or
-`$HOME/.local/share/fmeca-mcp`), else `./fmeca-state`.
+outside that directory and are never overwritten. See
+[Configuration](#configuration) for where state goes.
+
+### Docker
+
+```sh
+docker run -i --rm ghcr.io/praxec/fmeca:0.1.0
+```
+
+Mount your project to keep analyses in its `.fmeca/` folder (without a mount
+the state is lost when the container exits):
+
+```sh
+docker run -i --rm -v "$PWD:/work" -w /work -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
+```
 
 ### From source
 
@@ -98,25 +126,47 @@ outside that directory and are never overwritten. State is resolved from
 cargo install fmeca-mcp
 ```
 
+`cargo install` works once the crate is published to crates.io. Until then,
+build from a checkout with `cargo build --release`.
+
 ## MCP client config
 
 It speaks MCP over stdio (the standard transport). Wire it into your editor like
-any other MCP server:
+any other MCP server. The same entry works in Claude Code (`.mcp.json`), Cursor
+(`.cursor/mcp.json`) and Copilot (`.mcp.json`):
 
-```jsonc
-{ "command": "fmeca-mcp" }
+```json
+{
+  "mcpServers": {
+    "fmeca": {
+      "command": "npx",
+      "args": ["-y", "@matthew-cochran/fmeca"]
+    }
+  }
+}
 ```
 
-Session state is persisted as one JSONL event log per session under the state
-directory, resolved from `FMECA_STATE_DIR`, else `$XDG_DATA_HOME/fmeca-mcp` (or
-`$HOME/.local/share/fmeca-mcp`), else `./fmeca-state`.
+Use `"command": "fmeca-mcp"` with `"args": []` for the binary. Codex uses TOML:
+
+```toml
+[mcp_servers.fmeca]
+command = "npx"
+args = ["-y", "@matthew-cochran/fmeca"]
+env_vars = ["OPENROUTER_API_KEY"]
+```
+
+Every client, with the skills install for each, is in
+[docs/AGENT-INSTALL.md](docs/AGENT-INSTALL.md). The key is optional (only `vet`
+uses it) and is never written to a config file: pass it as
+`"env": { "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}" }` where the client
+expands variables, or let the server inherit it from the environment.
 
 ## Tool surface
 
 | Tool | Does |
 |------|------|
 | `session.open` | Start or resume a session; optionally selects the matrix strategy and records analysis metadata (`title`, `level`, `aspect`, `scope_paths`, `parent`), all fixed for the session's life. |
-| `append` | Add a failure mode, add a mitigation, or re-score an existing failure mode. `set_mitigation_status` moves a mitigation through planned, implemented, verified or abandoned (verified needs evidence other than a note). `set_failure_mode_disposition` accepts a failure mode's residual risk (needs an approver) or excludes it as not credible (needs evidence); failure modes are never deleted. Returns the recomputed state. |
+| `append` | Add a failure mode (`add_failure_mode`), add a mitigation (`add_mitigation`), or re-score an existing failure mode (`rescore`). `set_mitigation_status` moves a mitigation through planned, implemented, verified or abandoned (verified needs evidence other than a note). `set_failure_mode_disposition` accepts a failure mode's residual risk (needs an approver) or excludes it as not credible (needs evidence); failure modes are never deleted. Returns the recomputed state. |
 | `state.get` | Read-only projection of the session: every failure mode with its computed criticality, residual, and standing. |
 | `risk.next` | The highest-criticality unmitigated failure mode — what to address next. |
 | `readiness.assess` | The readiness gate: is every High/Medium residual reduced and every blocker cleared? |
@@ -128,6 +178,28 @@ directory, resolved from `FMECA_STATE_DIR`, else `$XDG_DATA_HOME/fmeca-mcp` (or
 
 The `analyze` tool reuses the exact same kernel compute as the session path, so
 the two can never diverge.
+
+## Keep analyses in your repo (`.fmeca/`)
+
+```sh
+fmeca-mcp init                 # at the project root: creates .fmeca/
+git add .fmeca && git commit -m "chore: add .fmeca"
+fmeca-mcp check --dir .fmeca   # in CI: replays every log, catches duplicate ids
+```
+
+Launch the server from the project root (or set `FMECA_STATE_DIR`) and it keeps
+one log per analysis in `.fmeca/`, named `<aspect>-<level>`. The setup, merge
+behaviour, Docker mount and the skill for each level are in
+[docs/AGENT-INSTALL.md](docs/AGENT-INSTALL.md#keep-analyses-in-your-repo-fmeca).
+
+## Configuration
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `FMECA_STATE_DIR` | nearest `.fmeca/`, else `$XDG_DATA_HOME/fmeca-mcp` (or `$HOME/.local/share/fmeca-mcp`), else `./fmeca-state` | Where the per-session logs live. |
+| `OPENROUTER_API_KEY` | unset | Enables the optional `vet` tool. Read from the environment only. |
+| `FMECA_JEV_MODEL` | `typesafe/jev-1.13` | The model `vet` asks. |
+| `FMECA_JEV_TIMEOUT_SECS` | `30` | `vet` request timeout, in seconds. |
 
 ## Matrix strategies
 
@@ -193,6 +265,10 @@ cargo test
 cargo fmt --all
 cargo clippy --all-targets -- -D warnings
 ```
+
+The agent skills under `skills/` are embedded in the binary at build time. After
+adding or removing a skill, a local incremental build does not notice; run
+`touch crates/fmeca-mcp/build.rs` and build again.
 
 CI runs build + test on Linux/macOS/Windows, plus `rustfmt` and `clippy`
 (warnings are denied). Please make sure those pass locally before opening a pull

@@ -1,0 +1,21 @@
+# fmeca
+
+> fmeca is a deterministic, offline MCP server for structured FMECA (Failure Modes, Effects and Criticality Analysis). The caller supplies observations, never scores; the engine computes severity, probability, criticality, residual risk and readiness. Run it with `npx -y @matthew-cochran/fmeca`, the `fmeca-mcp` binary, or `docker run -i --rm ghcr.io/praxec/fmeca:0.1.0`.
+
+## Install and use
+
+- [Agent install guide](docs/AGENT-INSTALL.md): MCP config and skills install for Claude Code, Claude Desktop, Codex, Cursor, VS Code/Copilot, Gemini CLI and AGENTS.md, plus how to keep analyses in `.fmeca/`.
+- [README](README.md): install options, MCP client config, configuration variables and the tool table (session.open, append, state.get, risk.next, readiness.assess, report.export, scoring.catalog, analyze, session.list, vet).
+- [Tool matrix](docs/agents/tool-matrix.md): per-client skill and MCP paths, checked against each client's docs.
+
+## Skills
+
+- [skills/](skills): nine agent skills. `fmeca` is the method reference; `fmeca-concept`, `fmeca-technical-plan`, `fmeca-project-plan`, `fmeca-implementation` and `fmeca-verification` run one analysis level each; `fmeca-resolve`, `fmeca-vet` and `fmeca-signoff` cover resolution, the optional Jev second opinion and sign-off.
+- [Levels and links](skills/fmeca/levels.md): which level to analyse, session ids (`<aspect>-<level>`), parents and evidence.
+- [One-shot example](skills/fmeca/examples/one-shot-analyze.json): a complete `analyze` input.
+
+## Maintainers
+
+- [Releasing](docs/releasing.md): the release runbook.
+- [Contributing](CONTRIBUTING.md): toolchain, gates and branch flow.
+- [Security policy](SECURITY.md): scope and how to report a vulnerability.

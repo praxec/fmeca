@@ -38,6 +38,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   failing.
 - Jev client (`fmeca_mcp::jev`): a `JudgmentModel` abstraction, an OpenRouter
   client, error mapping and test fakes.
+- Docs: `docs/AGENT-INSTALL.md`, an install guide an AI coding agent can follow
+  for Claude Code, Claude Desktop, Codex, Cursor, VS Code/Copilot, Gemini CLI
+  and AGENTS.md (MCP config, skills, verification, `.fmeca/` in your repo),
+  `llms.txt`, and README install, configuration and tool sections. A test checks
+  that every config snippet parses and no key is spelled out.
 - Kernel (`fmeca`): analysis metadata and links. `SessionMeta` (title, level,
   aspect, scope paths, parent session) is recorded on `SessionOpened`, with
   `AnalysisLevel` covering concept, conops, technical plan, project plan,
