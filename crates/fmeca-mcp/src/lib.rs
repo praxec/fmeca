@@ -9,6 +9,8 @@
 
 pub mod cli;
 pub mod config;
+#[cfg(feature = "jev")]
+pub mod jev;
 pub mod project;
 pub mod server;
 

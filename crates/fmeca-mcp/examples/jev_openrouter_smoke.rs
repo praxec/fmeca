@@ -235,6 +235,8 @@ async fn main() {
     let scrub = |text: &str| text.replace(&key, "[redacted]");
 
     let wire = JevConfig::new(&key).model(MODEL).with_endpoint(ENDPOINT);
+    // reqwest is built with `rustls-no-provider`: install ring first.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let client = rig_reqwest::ReqwestClient::from(
         rig_reqwest::reqwest::Client::builder()
             .build()

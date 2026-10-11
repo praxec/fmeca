@@ -19,7 +19,14 @@ path = "src/main.rs"
 
 [features]
 default = ["jev"]
-jev = ["dep:rig-core", "dep:rig-typesafeai", "dep:rig-reqwest", "dep:async-trait", "dep:sha2"]
+# The Jev client. TLS is rustls with the `ring` crypto provider (no
+# aws-lc-sys, so no cmake on the release runners): rig is built without its
+# `rustls` feature, which would pick reqwest's aws-lc default, and reqwest
+# gets `rustls-no-provider`; `jev::client` installs ring before building a
+# client.
+jev = ["dep:rig-core", "dep:rig-typesafeai", "dep:rig-reqwest", "dep:reqwest", "dep:rustls", "dep:async-trait"]
+# Exposes `jev::fake::FakeJudge` to integration tests and dependants.
+test-fakes = ["jev"]
 
 [dependencies]
 fmeca = { path = "../fmeca", version = "0.0.2" }
@@ -30,11 +37,12 @@ serde_json = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-rig-core = { version = "0.44", default-features = false, features = ["reqwest", "rustls"], optional = true }
-rig-typesafeai = { version = "0.44", default-features = false, features = ["reqwest", "rustls"], optional = true }
-rig-reqwest = { version = "0.44", default-features = false, features = ["rustls"], optional = true }
+rig-core = { version = "0.44", default-features = false, features = ["reqwest"], optional = true }
+rig-typesafeai = { version = "0.44", default-features = false, features = ["reqwest"], optional = true }
+rig-reqwest = { version = "0.44", default-features = false, optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "charset", "http2", "system-proxy"], optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"], optional = true }
 async-trait = { version = "0.1", optional = true }
-sha2 = { version = "0.10", optional = true }
 
 [[example]]
 name = "jev_openrouter_smoke"
@@ -42,3 +50,4 @@ required-features = ["jev"]
 
 [dev-dependencies]
 tempfile = "3"
+wiremock = "0.6"
