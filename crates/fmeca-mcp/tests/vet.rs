@@ -189,7 +189,8 @@ impl JudgmentModel for CostlyJudge {
                 .map(|(id, q)| (id.clone(), answer(q, 0.5, 2.0, "prevention")))
                 .collect(),
             model: "fake/costly".to_string(),
-            usage: None,
+            usage: serde_json::from_value(json!({ "input_tokens": 1200, "output_tokens": 80 }))
+                .ok(),
             cost: Some(0.0012),
         })
     }
@@ -241,8 +242,11 @@ async fn vet_leaves_session_outputs_byte_identical() {
     let (srv, dir) = judged(fake(0.9, 4.0, "fail_fast"));
     seeded_session(&srv);
     let before = snapshot(&srv, dir.path());
-    srv.vet(json!({ "session_id": SESSION })).await.unwrap();
-    assert_eq!(before, snapshot(&srv, dir.path()));
+    let result = srv.vet(json!({ "session_id": SESSION })).await.unwrap();
+    assert_eq!(
+        (result["status"].clone(), snapshot(&srv, dir.path())),
+        (json!("ok"), before)
+    );
 }
 
 #[tokio::test]
@@ -250,11 +254,22 @@ async fn vet_coverage_returns_candidates_without_appending() {
     let (srv, dir) = judged(fake(0.5, 4.0, "prevention"));
     seeded_session(&srv);
     let log = dir.path().join(format!("{SESSION}.jsonl"));
-    let before = std::fs::read(&log).unwrap().len();
-    srv.vet(json!({ "session_id": SESSION, "checks": ["coverage"] }))
+    let before = std::fs::read(&log).unwrap();
+    let result = srv
+        .vet(json!({ "session_id": SESSION, "checks": ["coverage"] }))
         .await
         .unwrap();
-    assert_eq!(before, std::fs::read(&log).unwrap().len());
+    let coverage = result["findings"]
+        .as_array()
+        .map_or(0, |f| f.iter().filter(|f| f["check"] == "coverage").count());
+    assert_eq!(
+        (
+            result["status"].clone(),
+            coverage,
+            std::fs::read(&log).unwrap()
+        ),
+        (json!("ok"), 7, before)
+    );
 }
 
 #[tokio::test]
@@ -466,6 +481,50 @@ async fn vet_reports_readiness_beside_gate() {
 }
 
 #[tokio::test]
+async fn vet_reports_usage_token_counts_beside_cost() {
+    let (srv, _d) = judged(Arc::new(CostlyJudge));
+    let result = srv.vet(analysis(1, 1)).await.unwrap();
+    assert_eq!(
+        (
+            result["usage"]["input_tokens"].clone(),
+            result["usage"]["cost"].clone()
+        ),
+        (json!(1200), json!(0.0012))
+    );
+}
+
+#[tokio::test]
+async fn vet_state_includes_session_level() {
+    let judge = fake(0.5, 2.0, "prevention");
+    let (srv, _d) = judged(judge.clone());
+    call(
+        &srv,
+        "session.open",
+        json!({ "session_id": "lv", "level": "technical_plan", "aspect": "checkout" }),
+    );
+    srv.vet(json!({ "session_id": "lv", "checks": ["coverage"] }))
+        .await
+        .unwrap();
+    assert_eq!(judge.states()[0]["meta"]["level"], "technical_plan");
+}
+
+#[tokio::test]
+async fn vet_coverage_question_names_the_level() {
+    let judge = fake(0.5, 2.0, "prevention");
+    let (srv, _d) = judged(judge.clone());
+    call(
+        &srv,
+        "session.open",
+        json!({ "session_id": "lv", "level": "technical_plan" }),
+    );
+    srv.vet(json!({ "session_id": "lv", "checks": ["coverage"] }))
+        .await
+        .unwrap();
+    let texts = serde_json::to_string(&judge.calls()[0]).unwrap();
+    assert!(texts.contains("at the technical_plan level"), "{texts}");
+}
+
+#[tokio::test]
 async fn vet_reports_usage_cost() {
     let (srv, _d) = judged(Arc::new(CostlyJudge));
     let result = srv.vet(analysis(1, 1)).await.unwrap();
@@ -500,6 +559,7 @@ fn tools_list_adds_vet_and_keeps_the_eight() {
             "report.export",
             "scoring.catalog",
             "analyze",
+            "session.list",
             "vet"
         ]
     );

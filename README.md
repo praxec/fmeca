@@ -115,14 +115,15 @@ directory, resolved from `FMECA_STATE_DIR`, else `$XDG_DATA_HOME/fmeca-mcp` (or
 
 | Tool | Does |
 |------|------|
-| `session.open` | Start or resume a session; optionally selects the matrix strategy (fixed for the session's life). |
-| `append` | Add a failure mode, add a mitigation, or re-score an existing failure mode. Returns the recomputed state. |
+| `session.open` | Start or resume a session; optionally selects the matrix strategy and records analysis metadata (`title`, `level`, `aspect`, `scope_paths`, `parent`), all fixed for the session's life. |
+| `append` | Add a failure mode, add a mitigation, or re-score an existing failure mode. `set_mitigation_status` moves a mitigation through planned, implemented, verified or abandoned (verified needs evidence other than a note). `set_failure_mode_disposition` accepts a failure mode's residual risk (needs an approver) or excludes it as not credible (needs evidence); failure modes are never deleted. Returns the recomputed state. |
 | `state.get` | Read-only projection of the session: every failure mode with its computed criticality, residual, and standing. |
 | `risk.next` | The highest-criticality unmitigated failure mode — what to address next. |
 | `readiness.assess` | The readiness gate: is every High/Medium residual reduced and every blocker cleared? |
 | `report.export` | The full FMECA table for the session. |
 | `scoring.catalog` | The fixed observation vocabulary for a strategy — the ids the caller draws from. |
 | `analyze` | Stateless one-shot: hand over an entire analysis, get back the entire computed report. No session, no persistence. |
+| `session.list` | Every analysis in the state dir (the project's `.fmeca/` when there is one), with its metadata, standing counts, `ready`, `ready_verified` and resolution counts. Filters: `level`, `aspect`, `parent`. A log that fails to replay is listed with its error. |
 | `vet` | Advisory: asks Jev (via OpenRouter, needs `OPENROUTER_API_KEY`) whether observations, mitigations, coverage and readiness hold up, and returns probabilities beside the deterministic gate. Never writes or changes a score; without a key it reports `vet_unavailable`. |
 
 The `analyze` tool reuses the exact same kernel compute as the session path, so

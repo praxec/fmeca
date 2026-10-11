@@ -48,6 +48,8 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 async-trait = { version = "0.1", optional = true }
 # sha256: `vet` question hashes and skills-install manifest digests / lock names.
 sha2 = "0.10"
+# The RFC 3339 `at` stamp on resolution changes (the kernel never reads a clock).
+time = { version = "0.3", features = ["formatting"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -61,3 +63,4 @@ tempfile = "3"
 wiremock = "0.6"
 async-trait = "0.1"
 toml = "1"
+time = { version = "0.3", features = ["parsing"] }
