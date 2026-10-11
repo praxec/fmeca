@@ -68,6 +68,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `failure_mode_dispositioned` events cannot be read by fmeca 0.0.2 or
   earlier.
 
+### Fixed
+
+- MCP: advertise the `security` domain in the `analyze` schema and server instructions, and make `risk.next` skip accepted failure modes.
+
 ## [0.0.1] - 2026-06-22
 
 Initial release.

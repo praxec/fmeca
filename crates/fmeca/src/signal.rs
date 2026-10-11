@@ -122,13 +122,14 @@ pub(crate) fn compute_signals(
 
 /// The highest-leverage failure mode to address next (`risk.next`): the
 /// highest-criticality **unmitigated** failure mode. Returns `None` when nothing
-/// is unmitigated High/Medium. Excluded failure modes never appear, and
-/// abandoned mitigations do not count as mitigation.
+/// is unmitigated High/Medium. Excluded and accepted failure modes never appear,
+/// and abandoned mitigations do not count as mitigation.
 pub fn next_risk(failure_modes: &[FailureModeView]) -> Option<&FailureModeView> {
     failure_modes
         .iter()
         .filter(|fmv| {
             fmv.disposition != Disposition::Excluded
+                && fmv.disposition != Disposition::Accepted
                 && !fmv.is_mitigated()
                 && matches!(fmv.criticality, Some(Level::High) | Some(Level::Medium))
         })

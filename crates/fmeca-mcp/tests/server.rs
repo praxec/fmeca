@@ -549,6 +549,30 @@ fn analyze_rejects_unknown_observation_id() {
 }
 
 #[test]
+fn analyze_accepts_security_domain() {
+    let (srv, _d) = server();
+    let result = call(
+        &srv,
+        TOOL_ANALYZE,
+        json!({
+            "failure_modes": [
+                {
+                    "id": "fm-sec",
+                    "component": { "id": "c:svc" },
+                    "description": "token leak",
+                    "cause": "verbose errors",
+                    "effect": "credential exposure",
+                    "domain": "security",
+                    "severity_observations": ["data_loss"],
+                    "probability_observations": ["happens_in_normal_use"]
+                }
+            ]
+        }),
+    );
+    assert!(result.is_ok());
+}
+
+#[test]
 fn analyze_empty_batch_is_not_ready() {
     let (srv, _d) = server();
     let report = call(&srv, TOOL_ANALYZE, json!({ "failure_modes": [] })).unwrap();

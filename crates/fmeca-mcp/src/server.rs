@@ -1065,7 +1065,7 @@ fn analyze_schema() -> Arc<rmcp::model::JsonObject> {
                         "effect": { "type": "string" },
                         "domain": {
                             "type": "string",
-                            "enum": ["ux", "runtime", "architecture", "delivery"]
+                            "enum": ["ux", "runtime", "architecture", "delivery", "security"]
                         },
                         "scope": {
                             "type": "string",
@@ -1203,7 +1203,7 @@ mitigation ids are caller-assigned and share one flat namespace (duplicates reje
 A mitigation's residual S/P is observation-derived too (residual_severity_observations /
 residual_probability_observations) — never a level you pick.
 Mitigation kinds: prevention | detection | fail_fast (prevention preferred).
-Domains: ux | runtime | architecture | delivery. Every fact carries a source
+Domains: ux | runtime | architecture | delivery | security. Every fact carries a source
 EvidenceRef{turn_id}. Errors carry stable prefixes: SESSION_NOT_FOUND, BAD_SESSION_ID,
 INVALID_FAILURE_MODE, INVALID_MITIGATION, INVALID_RESCORE, INVALID_OBSERVATION,
 FM_NOT_FOUND, DUPLICATE_ID, STORE_ERROR.
