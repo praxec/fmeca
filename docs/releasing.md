@@ -194,8 +194,11 @@ cargo publish -p fmeca --dry-run --locked
 cargo package -p fmeca --list --locked   # no docs/superpowers, .github or scripts
 cargo publish -p fmeca --locked
 # Wait for `fmeca X.Y.Z` to appear on crates.io, then:
-cargo publish -p fmeca-mcp --dry-run --locked
-cargo publish -p fmeca-mcp --locked
+# skills/ is copied in as a generated packaging input (gitignored); see build.rs
+rm -rf crates/fmeca-mcp/skills && cp -R skills crates/fmeca-mcp/skills
+cargo publish -p fmeca-mcp --dry-run --locked --allow-dirty
+cargo publish --locked -p fmeca-mcp --allow-dirty
+rm -rf crates/fmeca-mcp/skills
 ```
 
 Until this step runs, crates.io keeps serving the previous versions, which is
