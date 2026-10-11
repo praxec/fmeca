@@ -13,9 +13,9 @@
 //!  - `residual_still_high` — mitigated, but residual criticality is still
 //!    High/Medium (under-mitigated; drives `remediate`).
 
+use crate::model::Issue;
 use crate::model::{FailureModeStanding, IssueType, Level, MitigationKind};
-use crate::model::{Issue, Mitigation};
-use crate::projection::FailureModeView;
+use crate::projection::{FailureModeView, MitigationView};
 
 /// The output of running every detector over the projection.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -78,7 +78,9 @@ fn detect_one(fmv: &FailureModeView, issues: &mut Vec<Issue>) {
     }
 
     // --- unmitigated High/Medium (drive `remediate`) -----------------------
-    if fmv.mitigations.is_empty() {
+    // Abandoned mitigations do not count: a failure mode whose every
+    // mitigation was abandoned is unmitigated.
+    if !fmv.is_mitigated() {
         match fmv.criticality {
             Some(Level::High) => issues.push(Issue {
                 id: format!("issue:{}:unmitigated_high", fm.id),
@@ -141,12 +143,11 @@ fn detect_one(fmv: &FailureModeView, issues: &mut Vec<Issue>) {
     }
 }
 
-/// True when every mitigation is `fail_fast` (and there is at least one).
-fn only_fail_fast(mitigations: &[Mitigation]) -> bool {
-    !mitigations.is_empty()
-        && mitigations
-            .iter()
-            .all(|m| m.kind == MitigationKind::FailFast)
+/// True when every active (non-abandoned) mitigation is `fail_fast` (and there
+/// is at least one).
+fn only_fail_fast(mitigations: &[MitigationView]) -> bool {
+    let mut active = mitigations.iter().filter(|m| m.is_active()).peekable();
+    active.peek().is_some() && active.all(|m| m.kind == MitigationKind::FailFast)
 }
 
 fn residual_severity(fmv: &FailureModeView) -> Level {

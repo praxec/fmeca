@@ -179,6 +179,7 @@ fn to_events(strategy: MatrixStrategy, failure_modes: &[AnalyzeInput]) -> Vec<Ev
     events.push(Event::SessionOpened {
         session_id: ANALYZE_SESSION_ID.to_string(),
         matrix_strategy: strategy,
+        meta: crate::model::SessionMeta::default(),
     });
     for input in failure_modes {
         events.push(Event::FailureModeAdded {
@@ -208,6 +209,11 @@ fn to_failure_mode(input: &AnalyzeInput) -> FailureMode {
         // The stateless path has no conversational turn; provenance defaults to
         // the failure-mode id so the projection still carries a stable source.
         source: EvidenceRef::new(input.id.clone()),
+        parent: None,
+        refs: Vec::new(),
+        local_effect: None,
+        next_effect: None,
+        single_point: false,
     }
 }
 

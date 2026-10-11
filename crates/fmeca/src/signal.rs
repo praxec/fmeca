@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::detect::DetectionOutput;
-use crate::model::{IssueType, Level};
+use crate::model::{Disposition, IssueType, Level};
 use crate::projection::FailureModeView;
 
 /// The kind of a [`Signal`].
@@ -117,12 +117,14 @@ pub(crate) fn compute_signals(
 
 /// The highest-leverage failure mode to address next (`risk.next`): the
 /// highest-criticality **unmitigated** failure mode. Returns `None` when nothing
-/// is unmitigated High/Medium.
+/// is unmitigated High/Medium. Excluded failure modes never appear, and
+/// abandoned mitigations do not count as mitigation.
 pub fn next_risk(failure_modes: &[FailureModeView]) -> Option<&FailureModeView> {
     failure_modes
         .iter()
         .filter(|fmv| {
-            fmv.mitigations.is_empty()
+            fmv.disposition != Disposition::Excluded
+                && !fmv.is_mitigated()
                 && matches!(fmv.criticality, Some(Level::High) | Some(Level::Medium))
         })
         .max_by_key(|fmv| fmv.criticality.map(|c| c.rank()).unwrap_or(0))

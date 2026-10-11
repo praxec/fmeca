@@ -14,6 +14,10 @@
 //! failure mode's mitigations; with no mitigation the residual is the raw S/P
 //! criticality.
 //!
+//! Abandoned mitigations (spec §6.3) are left out of residual and standing,
+//! and so out of every detector that asks "is this failure mode mitigated?".
+//! The verified residual and the verified gate use `Verified` mitigations only.
+//!
 //! Standing rules:
 //!  - `acceptable`     — residual criticality is `Low`.
 //!  - `under_mitigated`— has ≥1 mitigation but residual criticality is High/Medium.
@@ -26,7 +30,10 @@ use serde::{Deserialize, Serialize};
 use crate::detect::{self, DetectionOutput};
 use crate::event::Event;
 use crate::matrix::MatrixStrategy;
-use crate::model::{Criticality, FailureMode, FailureModeStanding, Issue, Level, Mitigation};
+use crate::model::{
+    Criticality, Disposition, DispositionChange, FailureMode, FailureModeStanding, Issue, Level,
+    Mitigation, MitigationStatus, MitigationStatusChange, ResolutionEvidence, SessionMeta,
+};
 use crate::readiness::ReadinessReport;
 use crate::response::{self, ResponseClass};
 use crate::scoring::{self, Axis};
@@ -37,6 +44,38 @@ use crate::signal::Signal;
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Registry {
     pub component_ids: Vec<String>,
+}
+
+/// A mitigation with its computed resolution status. Derefs to the
+/// [`Mitigation`] it wraps, so `view.kind` / `view.description` read through.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MitigationView {
+    #[serde(flatten)]
+    pub mitigation: Mitigation,
+    /// The last `MitigationStatusChanged` status, or `Planned`.
+    #[serde(default)]
+    pub status: MitigationStatus,
+    /// Evidence accumulated across every status change, in order.
+    #[serde(default)]
+    pub evidence: Vec<ResolutionEvidence>,
+    /// Every status change, in append order.
+    #[serde(default)]
+    pub history: Vec<MitigationStatusChange>,
+}
+
+impl std::ops::Deref for MitigationView {
+    type Target = Mitigation;
+
+    fn deref(&self) -> &Mitigation {
+        &self.mitigation
+    }
+}
+
+impl MitigationView {
+    /// True unless the mitigation was abandoned.
+    pub fn is_active(&self) -> bool {
+        self.status != MitigationStatus::Abandoned
+    }
 }
 
 /// A failure mode paired with its computed criticality, residual, standing, and
@@ -65,8 +104,18 @@ pub struct FailureModeView {
     /// Code-derived unmitigated probability on the session's strategy scale
     ///. `None` if no probability observation was given.
     pub derived_probability: Option<crate::matrix::StrategyLevel>,
-    /// Mitigations applied to this failure mode, in append order.
-    pub mitigations: Vec<Mitigation>,
+    /// Mitigations applied to this failure mode, in append order, with their
+    /// resolution status.
+    pub mitigations: Vec<MitigationView>,
+    /// Best residual among `Verified` mitigations, else the raw criticality.
+    #[serde(default)]
+    pub verified_residual_criticality: Option<Criticality>,
+    /// The last `FailureModeDispositioned` disposition, or `Open`.
+    #[serde(default)]
+    pub disposition: Disposition,
+    /// Every disposition change, in append order.
+    #[serde(default)]
+    pub disposition_history: Vec<DispositionChange>,
 }
 
 impl FailureModeView {
@@ -78,6 +127,17 @@ impl FailureModeView {
             && self.failure_mode.effect.is_some()
             && self.derived_severity.is_some()
             && self.derived_probability.is_some()
+    }
+
+    /// Mitigations that still count toward residual and standing (not
+    /// `Abandoned`), in append order.
+    pub fn active_mitigations(&self) -> impl Iterator<Item = &MitigationView> {
+        self.mitigations.iter().filter(|m| m.is_active())
+    }
+
+    /// True when the failure mode has at least one non-abandoned mitigation.
+    pub fn is_mitigated(&self) -> bool {
+        self.active_mitigations().next().is_some()
     }
 }
 
@@ -111,6 +171,9 @@ fn strategy_level(strategy: MatrixStrategy, ordinal: u8) -> Option<crate::matrix
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FmecaState {
     pub session_id: String,
+    /// Analysis metadata recorded on `SessionOpened` (default for old logs).
+    #[serde(default)]
+    pub meta: SessionMeta,
     /// The criticality-matrix strategy selected when this session was opened
     ///. Fixed for the life of the session; recorded in `SessionOpened`.
     pub matrix_strategy: MatrixStrategy,
@@ -141,6 +204,13 @@ pub(crate) struct RawFold {
     pub failure_modes: Vec<FailureMode>,
     /// Mitigations in append order.
     pub mitigations: Vec<Mitigation>,
+    /// Analysis metadata from `SessionOpened`.
+    pub meta: SessionMeta,
+    /// Mitigation status changes in append order (unknown ids are ignored).
+    pub status_changes: Vec<MitigationStatusChange>,
+    /// Failure-mode disposition changes in append order (unknown ids are
+    /// ignored).
+    pub disposition_changes: Vec<DispositionChange>,
 }
 
 /// Fold a replayed event stream into a [`RawFold`] (pass 1). A `Rescored` event
@@ -152,9 +222,11 @@ pub(crate) fn raw_fold(events: &[Event]) -> RawFold {
             Event::SessionOpened {
                 session_id,
                 matrix_strategy,
+                meta,
             } => {
                 fold.session_id = session_id.clone();
                 fold.matrix_strategy = *matrix_strategy;
+                fold.meta = meta.clone();
             }
             Event::FailureModeAdded { failure_mode } => {
                 fold.failure_modes.push((**failure_mode).clone());
@@ -173,6 +245,12 @@ pub(crate) fn raw_fold(events: &[Event]) -> RawFold {
                     fm.severity_observations = rescore.severity_observations.clone();
                     fm.probability_observations = rescore.probability_observations.clone();
                 }
+            }
+            Event::MitigationStatusChanged { change } => {
+                fold.status_changes.push((**change).clone());
+            }
+            Event::FailureModeDispositioned { change } => {
+                fold.disposition_changes.push((**change).clone());
             }
         }
     }
@@ -198,6 +276,24 @@ pub(crate) fn mitigations_for<'a>(fold: &'a RawFold, fm_id: &str) -> Vec<&'a Mit
         .iter()
         .filter(|m| m.failure_mode_id == fm_id)
         .collect()
+}
+
+/// A mitigation's view: status = last change (or `Planned`), evidence
+/// accumulated, full history. Changes for other ids are ignored, so a change
+/// naming an unknown mitigation is simply dropped (replay stays total).
+fn mitigation_view(fold: &RawFold, mitigation: &Mitigation) -> MitigationView {
+    let history: Vec<MitigationStatusChange> = fold
+        .status_changes
+        .iter()
+        .filter(|c| c.mitigation_id == mitigation.id)
+        .cloned()
+        .collect();
+    MitigationView {
+        mitigation: mitigation.clone(),
+        status: history.last().map(|c| c.status).unwrap_or_default(),
+        evidence: history.iter().flat_map(|c| c.evidence.clone()).collect(),
+        history,
+    }
 }
 
 /// Raw criticality of a failure mode from its code-derived unmitigated S/P
@@ -289,8 +385,36 @@ fn standing_of(
     }
 }
 
+/// The mitigations of `views` that satisfy `keep`, as plain [`Mitigation`]
+/// references for the residual / standing helpers.
+fn mitigations_where(
+    views: &[MitigationView],
+    keep: impl Fn(&MitigationView) -> bool,
+) -> Vec<&Mitigation> {
+    views
+        .iter()
+        .filter(|m| keep(m))
+        .map(|m| &m.mitigation)
+        .collect()
+}
+
+/// The view the verified gate sees: every non-verified mitigation removed,
+/// residual and standing recomputed from the verified ones.
+fn verified_view(fmv: &FailureModeView) -> FailureModeView {
+    let mut view = fmv.clone();
+    view.mitigations
+        .retain(|m| m.status == MitigationStatus::Verified);
+    let verified = mitigations_where(&view.mitigations, |_| true);
+    view.residual_criticality = fmv.verified_residual_criticality;
+    view.standing = standing_of(&verified, view.residual_criticality);
+    view
+}
+
 /// Build the complete [`FmecaState`] from a replayed event stream. This is the
 /// single deterministic entry point used by both `state.get` and `append`.
+///
+/// Total: never panics, even on a log `validate_log` would reject (changes for
+/// unknown ids are ignored).
 pub fn project(events: &[Event]) -> FmecaState {
     let fold = raw_fold(events);
     let registry = build_registry(&fold);
@@ -300,12 +424,24 @@ pub fn project(events: &[Event]) -> FmecaState {
         .failure_modes
         .iter()
         .map(|fm| {
-            let mits = mitigations_for(&fold, &fm.id);
+            let views: Vec<MitigationView> = mitigations_for(&fold, &fm.id)
+                .into_iter()
+                .map(|m| mitigation_view(&fold, m))
+                .collect();
+            let active = mitigations_where(&views, MitigationView::is_active);
+            let verified = mitigations_where(&views, |m| m.status == MitigationStatus::Verified);
             let (sev_ordinal, prob_ordinal) = derived_ordinals(strategy, fm);
             let raw = raw_criticality(strategy, sev_ordinal, prob_ordinal);
-            let residual = residual_criticality(strategy, raw, &mits);
-            let standing = standing_of(&mits, residual);
+            let residual = residual_criticality(strategy, raw, &active);
+            let verified_residual = residual_criticality(strategy, raw, &verified);
+            let standing = standing_of(&active, residual);
             let response_class = response::response_class(raw, fm.domain, fm.scope);
+            let disposition_history: Vec<DispositionChange> = fold
+                .disposition_changes
+                .iter()
+                .filter(|c| c.failure_mode_id == fm.id)
+                .cloned()
+                .collect();
             FailureModeView {
                 failure_mode: fm.clone(),
                 criticality: raw,
@@ -314,17 +450,31 @@ pub fn project(events: &[Event]) -> FmecaState {
                 response_class,
                 derived_severity: sev_ordinal.and_then(|o| strategy_level(strategy, o)),
                 derived_probability: prob_ordinal.and_then(|o| strategy_level(strategy, o)),
-                mitigations: mits.into_iter().cloned().collect(),
+                mitigations: views,
+                verified_residual_criticality: verified_residual,
+                disposition: disposition_history
+                    .last()
+                    .map(|c| c.disposition)
+                    .unwrap_or_default(),
+                disposition_history,
             }
         })
         .collect();
 
     let detection: DetectionOutput = detect::detect(&failure_modes);
-    let readiness = crate::readiness::assess(&failure_modes, &detection.issues);
+    let verified_views: Vec<FailureModeView> = failure_modes.iter().map(verified_view).collect();
+    let verified_detection = detect::detect(&verified_views);
+    let readiness = crate::readiness::assess(
+        &failure_modes,
+        &detection.issues,
+        &verified_views,
+        &verified_detection.issues,
+    );
     let signals = crate::signal::compute_signals(&failure_modes, &detection);
 
     FmecaState {
         session_id: fold.session_id.clone(),
+        meta: fold.meta.clone(),
         matrix_strategy: strategy,
         matrix_scale: strategy.scale(),
         failure_modes,

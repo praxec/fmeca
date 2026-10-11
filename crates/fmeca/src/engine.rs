@@ -20,7 +20,10 @@ use std::sync::{Arc, Mutex};
 use crate::error::{FmecaError, Result};
 use crate::event::Event;
 use crate::matrix::MatrixStrategy;
-use crate::model::{FailureMode, Mitigation, Rescore};
+use crate::model::{
+    Disposition, DispositionChange, FailureMode, Mitigation, MitigationStatus,
+    MitigationStatusChange, ParentRef, Rescore, ResolutionEvidence, SessionMeta,
+};
 use crate::projection::{self, FailureModeView, FmecaState};
 use crate::scoring::{self, Axis};
 use crate::store::{StateStore, validate_session_id};
@@ -80,13 +83,32 @@ impl Engine {
         session_id: &str,
         matrix_strategy: MatrixStrategy,
     ) -> Result<FmecaState> {
+        self.open_session_with_meta(session_id, matrix_strategy, SessionMeta::default())
+    }
+
+    /// `session.open` with a strategy and analysis metadata (spec §6.2). A
+    /// `meta.parent` must name an existing session, else `SESSION_NOT_FOUND`.
+    /// Like the strategy, the metadata of an existing session is never changed:
+    /// reopening ignores both and returns the current state.
+    pub fn open_session_with_meta(
+        &self,
+        session_id: &str,
+        matrix_strategy: MatrixStrategy,
+        meta: SessionMeta,
+    ) -> Result<FmecaState> {
         validate_session_id(session_id)?;
         let lock = self.session_lock(session_id);
         let _guard = lock.lock().unwrap_or_else(|p| p.into_inner());
         if !self.store.exists(session_id)? {
+            if let Some(parent) = &meta.parent
+                && (validate_session_id(parent).is_err() || !self.store.exists(parent)?)
+            {
+                return Err(FmecaError::SessionNotFound(parent.clone()));
+            }
             let event = Event::SessionOpened {
                 session_id: session_id.to_string(),
                 matrix_strategy,
+                meta,
             };
             self.store.append(session_id, &event)?;
         }
@@ -110,6 +132,9 @@ impl Engine {
         validate_failure_mode(&fm, session_id, session_strategy(&events))?;
         if id_exists(&events, &fm.id) {
             return Err(FmecaError::DuplicateId(fm.id));
+        }
+        if let Some(parent) = &fm.parent {
+            self.require_parent_failure_mode(session_id, &events, parent)?;
         }
         self.store.append(
             session_id,
@@ -176,6 +201,102 @@ impl Engine {
         self.state(session_id)
     }
 
+    /// `append` variant `set_mitigation_status` (spec §6.3). The mitigation must
+    /// exist; `Verified` needs at least one evidence item that is not a note.
+    /// Any transition is allowed; every change is kept in the history.
+    pub fn set_mitigation_status(
+        &self,
+        session_id: &str,
+        change: MitigationStatusChange,
+    ) -> Result<FmecaState> {
+        validate_session_id(session_id)?;
+        let lock = self.session_lock(session_id);
+        let _guard = lock.lock().unwrap_or_else(|p| p.into_inner());
+        let events = self.require_session(session_id)?;
+        if change.session_id != session_id {
+            return Err(FmecaError::InvalidMitigation(format!(
+                "session_id mismatch: payload '{}' vs '{session_id}'",
+                change.session_id
+            )));
+        }
+        if !mitigation_exists(&events, &change.mitigation_id) {
+            return Err(FmecaError::InvalidMitigation(format!(
+                "mitigation not found: {}",
+                change.mitigation_id
+            )));
+        }
+        if change.status == MitigationStatus::Verified && !has_substantive(&change.evidence) {
+            return Err(FmecaError::InvalidMitigation(
+                "verified requires evidence other than a note".into(),
+            ));
+        }
+        self.store.append(
+            session_id,
+            &Event::MitigationStatusChanged {
+                change: Box::new(change),
+            },
+        )?;
+        self.state(session_id)
+    }
+
+    /// `append` variant `set_failure_mode_disposition` (spec §6.6.2). The
+    /// failure mode must exist and `rationale` must be non-empty; `Accepted`
+    /// needs an approver, `Excluded` needs evidence that is not a note.
+    pub fn set_failure_mode_disposition(
+        &self,
+        session_id: &str,
+        change: DispositionChange,
+    ) -> Result<FmecaState> {
+        validate_session_id(session_id)?;
+        let lock = self.session_lock(session_id);
+        let _guard = lock.lock().unwrap_or_else(|p| p.into_inner());
+        let events = self.require_session(session_id)?;
+        if change.session_id != session_id {
+            return Err(FmecaError::InvalidFailureMode(format!(
+                "session_id mismatch: payload '{}' vs '{session_id}'",
+                change.session_id
+            )));
+        }
+        if !failure_mode_exists(&events, &change.failure_mode_id) {
+            return Err(FmecaError::FailureModeNotFound(change.failure_mode_id));
+        }
+        if change.rationale.trim().is_empty() {
+            return Err(FmecaError::InvalidFailureMode(
+                "disposition requires a rationale".into(),
+            ));
+        }
+        match change.disposition {
+            Disposition::Accepted
+                if change
+                    .approver
+                    .as_deref()
+                    .is_none_or(|a| a.trim().is_empty()) =>
+            {
+                return Err(FmecaError::InvalidFailureMode(
+                    "accepted requires an approver".into(),
+                ));
+            }
+            Disposition::Excluded if !has_substantive(&change.evidence) => {
+                return Err(FmecaError::InvalidFailureMode(
+                    "excluded requires evidence other than a note".into(),
+                ));
+            }
+            _ => {}
+        }
+        self.store.append(
+            session_id,
+            &Event::FailureModeDispositioned {
+                change: Box::new(change),
+            },
+        )?;
+        self.state(session_id)
+    }
+
+    /// Session ids in the store, sorted (see [`StateStore::list_sessions`]).
+    pub fn list_sessions(&self) -> Result<Vec<String>> {
+        self.store.list_sessions()
+    }
+
     /// `risk.next`: the highest-criticality unmitigated failure mode,
     /// or `None`.
     pub fn risk_next(&self, session_id: &str) -> Result<Option<FailureModeView>> {
@@ -192,6 +313,34 @@ impl Engine {
     pub fn export(&self, session_id: &str) -> Result<crate::export::FmecaReport> {
         let state = self.state(session_id)?;
         Ok(crate::export::build(&state))
+    }
+
+    /// A failure mode's `parent` must name an existing session that contains
+    /// that failure-mode id. Checked on append only, never on replay.
+    fn require_parent_failure_mode(
+        &self,
+        session_id: &str,
+        events: &[Event],
+        parent: &ParentRef,
+    ) -> Result<()> {
+        let found = if parent.session_id == session_id {
+            failure_mode_exists(events, &parent.failure_mode_id)
+        } else if validate_session_id(&parent.session_id).is_ok()
+            && self.store.exists(&parent.session_id)?
+        {
+            let parent_events = self.store.replay(&parent.session_id)?;
+            failure_mode_exists(&parent_events, &parent.failure_mode_id)
+        } else {
+            false
+        };
+        if found {
+            Ok(())
+        } else {
+            Err(FmecaError::InvalidFailureMode(format!(
+                "parent failure mode not found: {}/{}",
+                parent.session_id, parent.failure_mode_id
+            )))
+        }
     }
 
     fn require_session(&self, session_id: &str) -> Result<Vec<Event>> {
@@ -299,8 +448,22 @@ fn id_exists(events: &[Event], id: &str) -> bool {
     events.iter().any(|e| match e {
         Event::FailureModeAdded { failure_mode } => failure_mode.id == id,
         Event::MitigationAdded { mitigation } => mitigation.id == id,
-        Event::SessionOpened { .. } | Event::Rescored { .. } => false,
+        Event::SessionOpened { .. }
+        | Event::Rescored { .. }
+        | Event::MitigationStatusChanged { .. }
+        | Event::FailureModeDispositioned { .. } => false,
     })
+}
+
+fn mitigation_exists(events: &[Event], mitigation_id: &str) -> bool {
+    events.iter().any(
+        |e| matches!(e, Event::MitigationAdded { mitigation } if mitigation.id == mitigation_id),
+    )
+}
+
+/// True when at least one evidence item is something other than a note.
+fn has_substantive(evidence: &[ResolutionEvidence]) -> bool {
+    evidence.iter().any(ResolutionEvidence::is_substantive)
 }
 
 fn failure_mode_exists(events: &[Event], fm_id: &str) -> bool {

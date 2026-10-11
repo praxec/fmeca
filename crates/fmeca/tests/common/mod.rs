@@ -32,6 +32,11 @@ pub fn failure_mode_obs(
         domain: Domain::Runtime,
         scope: None,
         source: EvidenceRef::new("turn-1"),
+        parent: None,
+        refs: Vec::new(),
+        local_effect: None,
+        next_effect: None,
+        single_point: false,
     }
 }
 
@@ -81,6 +86,11 @@ pub fn failure_mode(session: &str, id: &str, severity: Level, probability: Level
         domain: Domain::Runtime,
         scope: None,
         source: EvidenceRef::new("turn-1"),
+        parent: None,
+        refs: Vec::new(),
+        local_effect: None,
+        next_effect: None,
+        single_point: false,
     }
 }
 
@@ -116,5 +126,50 @@ pub fn rescore(session: &str, fm_id: &str, severity: Level, probability: Level) 
         severity_observations: vec![severity_obs(severity)],
         probability_observations: vec![probability_obs(probability)],
         source: EvidenceRef::new("turn-3"),
+    }
+}
+
+/// One resolution-evidence item of the given kind (no basis).
+pub fn evidence(kind: fmeca::EvidenceKind, reference: &str) -> fmeca::ResolutionEvidence {
+    fmeca::ResolutionEvidence {
+        kind,
+        reference: reference.to_string(),
+        basis: None,
+    }
+}
+
+/// A mitigation status change carrying the given evidence (no note, no `at`).
+pub fn status_change(
+    session: &str,
+    mitigation_id: &str,
+    status: fmeca::MitigationStatus,
+    evidence: Vec<fmeca::ResolutionEvidence>,
+) -> fmeca::MitigationStatusChange {
+    fmeca::MitigationStatusChange {
+        session_id: session.to_string(),
+        mitigation_id: mitigation_id.to_string(),
+        status,
+        evidence,
+        note: None,
+        at: None,
+    }
+}
+
+/// A failure-mode disposition change with a non-empty rationale.
+pub fn disposition_change(
+    session: &str,
+    fm_id: &str,
+    disposition: fmeca::Disposition,
+    approver: Option<&str>,
+    evidence: Vec<fmeca::ResolutionEvidence>,
+) -> fmeca::DispositionChange {
+    fmeca::DispositionChange {
+        session_id: session.to_string(),
+        failure_mode_id: fm_id.to_string(),
+        disposition,
+        rationale: "a rationale".to_string(),
+        approver: approver.map(String::from),
+        evidence,
+        at: None,
     }
 }
