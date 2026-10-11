@@ -223,8 +223,10 @@ pub enum UnavailableReason {
     /// No reply within the configured timeout.
     Timeout,
     /// The provider answered 400..=499 (bad key, rate limit, bad request).
+    #[serde(rename = "http_4xx")]
     Http4xx,
     /// The provider answered 500..=599.
+    #[serde(rename = "http_5xx")]
     Http5xx,
     /// No reply: connection refused or reset, DNS, TLS.
     Network,
@@ -402,7 +404,15 @@ mod tests {
     fn reason_serializes_snake_case() {
         assert_eq!(
             serde_json::to_value(UnavailableReason::Http4xx).ok(),
-            Some(serde_json::json!("http4xx"))
+            Some(serde_json::json!("http_4xx"))
+        );
+    }
+
+    #[test]
+    fn http_5xx_reason_serializes_with_underscore() {
+        assert_eq!(
+            serde_json::to_value(UnavailableReason::Http5xx).ok(),
+            Some(serde_json::json!("http_5xx"))
         );
     }
 }

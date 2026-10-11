@@ -175,7 +175,9 @@ async fn refused_connection_maps_to_network() {
     // the CI runners, but under WSL2 mirrored networking a closed IPv4
     // loopback port hangs instead of refusing.
     config.endpoint = "http://[::1]:9/api/v1/systemone".to_string();
-    config.timeout = Duration::from_secs(5);
+    // A real refusal returns early; Windows runners take 1-2 s to refuse on
+    // loopback, so the bound is generous.
+    config.timeout = Duration::from_secs(20);
     let error = OpenRouterJudge::new(&config)
         .decide(json!({"failure_mode": "fm-1"}), noul_question())
         .await

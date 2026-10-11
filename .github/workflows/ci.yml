@@ -92,7 +92,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.99.0
       - name: fmeca kernel has no network deps
-        run: "! cargo tree -p fmeca -e normal | grep -E '\\b(rig|reqwest)'"
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree="$(cargo tree --locked -p fmeca -e normal)"
+          if grep -E '\b(rig|reqwest)' <<<"$tree"; then
+            echo "::error::fmeca kernel depends on rig/reqwest"
+            exit 1
+          fi
       - name: server builds without jev
         run: cargo build -p fmeca-mcp --no-default-features --locked
   # Builds the release binary for each frozen release.yml target, so a
