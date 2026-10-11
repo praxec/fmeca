@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use fmeca::{Engine, FilesystemStore};
 use fmeca_mcp::{
-    FmecaServer, TOOL_ANALYZE, TOOL_APPEND, TOOL_NAMES, TOOL_READINESS_ASSESS, TOOL_REPORT_EXPORT,
+    FmecaServer, TOOL_ANALYZE, TOOL_APPEND, TOOL_READINESS_ASSESS, TOOL_REPORT_EXPORT,
     TOOL_RISK_NEXT, TOOL_SCORING_CATALOG, TOOL_SESSION_OPEN, TOOL_STATE_GET,
 };
 use rmcp::model::CallToolRequestParams;
@@ -70,21 +70,25 @@ fn low_residual_mitigation(session_id: &str) -> Value {
 }
 
 #[test]
-fn lists_eight_tools() {
-    // Original six command/query tools + the v2 scoring.catalog query + the
-    // stateless analyze batch tool.
-    assert_eq!(TOOL_NAMES.len(), 8);
-    let (srv, _d) = server();
-    let defs = fmeca_mcp::tool_definitions();
-    assert_eq!(defs.len(), 8);
-    // every advertised name is dispatchable
-    for name in TOOL_NAMES {
-        let _ = srv.engine();
-        assert!(defs.iter().any(|t| t.name == *name));
-    }
-    // the scoring.catalog and analyze tools are present
-    assert!(TOOL_NAMES.contains(&TOOL_SCORING_CATALOG));
-    assert!(TOOL_NAMES.contains(&TOOL_ANALYZE));
+fn lists_the_eight_pinned_tools() {
+    let names: Vec<String> = fmeca_mcp::tool_definitions()
+        .into_iter()
+        .map(|t| t.name.to_string())
+        .collect();
+    let pinned = [
+        "session.open",
+        "append",
+        "state.get",
+        "risk.next",
+        "readiness.assess",
+        "report.export",
+        "scoring.catalog",
+        "analyze",
+    ];
+    assert!(
+        pinned.iter().all(|p| names.iter().any(|n| n == p)),
+        "missing pinned tool in {names:?}"
+    );
 }
 
 #[test]

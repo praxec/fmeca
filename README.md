@@ -123,6 +123,7 @@ directory, resolved from `FMECA_STATE_DIR`, else `$XDG_DATA_HOME/fmeca-mcp` (or
 | `report.export` | The full FMECA table for the session. |
 | `scoring.catalog` | The fixed observation vocabulary for a strategy — the ids the caller draws from. |
 | `analyze` | Stateless one-shot: hand over an entire analysis, get back the entire computed report. No session, no persistence. |
+| `vet` | Advisory: asks Jev (via OpenRouter, needs `OPENROUTER_API_KEY`) whether observations, mitigations, coverage and readiness hold up, and returns probabilities beside the deterministic gate. Never writes or changes a score; without a key it reports `vet_unavailable`. |
 
 The `analyze` tool reuses the exact same kernel compute as the session path, so
 the two can never diverge.

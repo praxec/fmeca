@@ -57,8 +57,32 @@ fn serve() -> anyhow::Result<()> {
     tracing::info!(?state_dir, source = ?source, "starting fmeca-mcp stdio server");
     let store = FilesystemStore::new(&state_dir)?;
     let engine = Engine::new(Arc::new(store));
-    let server = FmecaServer::new(engine);
+    let server = with_jev(FmecaServer::new(engine));
     tokio::runtime::Runtime::new()?.block_on(server.serve_stdio())
+}
+
+/// Give the server a Jev judge when `OPENROUTER_API_KEY` is set. A rejected
+/// configuration disables `vet` and is reported by it as `bad_config`.
+#[cfg(feature = "jev")]
+fn with_jev(server: FmecaServer) -> FmecaServer {
+    use fmeca_mcp::jev::{JevConfig, JudgmentModel, OpenRouterJudge};
+
+    match JevConfig::from_env() {
+        Ok(Some(config)) => {
+            let judge: Arc<dyn JudgmentModel> = Arc::new(OpenRouterJudge::new(&config));
+            server.with_judge(Some(judge))
+        }
+        Ok(None) => server.with_judge(None),
+        Err(error) => {
+            tracing::warn!(reason = ?error.reason, "jev disabled");
+            server.with_judge(None).with_judge_unavailable(Some(error))
+        }
+    }
+}
+
+#[cfg(not(feature = "jev"))]
+fn with_jev(server: FmecaServer) -> FmecaServer {
+    server
 }
 
 fn run_init(dir: Option<PathBuf>) -> anyhow::Result<()> {

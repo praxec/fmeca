@@ -18,6 +18,7 @@
 //! | `report.export`    | query   | [`Engine::export`]             |
 //! | `scoring.catalog`  | query   | [`fmeca::catalog`]        |
 //! | `analyze`          | batch   | [`fmeca::analyze()`]      |
+//! | `vet`              | advisory | Jev second opinion (feature `jev`) |
 //!
 //! Errors propagate the kernel's stable prefixes (`SESSION_NOT_FOUND`,
 //! `INVALID_FAILURE_MODE`, `BAD_SESSION_ID`, …) verbatim in the MCP error
@@ -42,6 +43,9 @@ use rmcp::{ServerHandler, ServiceExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+#[cfg(feature = "jev")]
+use crate::jev::{JudgmentModel, Unavailable};
+
 /// Tool names, `noun.verb` like the rest of the workspace.
 pub const TOOL_SESSION_OPEN: &str = "session.open";
 pub const TOOL_APPEND: &str = "append";
@@ -51,10 +55,15 @@ pub const TOOL_READINESS_ASSESS: &str = "readiness.assess";
 pub const TOOL_REPORT_EXPORT: &str = "report.export";
 pub const TOOL_SCORING_CATALOG: &str = "scoring.catalog";
 pub const TOOL_ANALYZE: &str = "analyze";
+/// The advisory Jev tool (feature `jev`): probabilities beside the
+/// deterministic results, never instead of them.
+#[cfg(feature = "jev")]
+pub const TOOL_VET: &str = "vet";
 
 /// All tool names in declaration order. The six core command/query tools, the
 /// `scoring.catalog` query (the fixed observation vocabulary the caller draws
-/// from), and the stateless one-shot `analyze` batch tool.
+/// from), the stateless one-shot `analyze` batch tool and, with the `jev`
+/// feature, the advisory `vet` tool.
 pub const TOOL_NAMES: &[&str] = &[
     TOOL_SESSION_OPEN,
     TOOL_APPEND,
@@ -64,6 +73,8 @@ pub const TOOL_NAMES: &[&str] = &[
     TOOL_REPORT_EXPORT,
     TOOL_SCORING_CATALOG,
     TOOL_ANALYZE,
+    #[cfg(feature = "jev")]
+    TOOL_VET,
 ];
 
 // --- wire arg structs ------------------------------------------------------
@@ -147,6 +158,13 @@ pub struct FmecaServer {
     engine: Engine,
     server_name: String,
     server_version: String,
+    /// The Jev judge `vet` asks; `None` when no key is configured.
+    #[cfg(feature = "jev")]
+    judge: Option<Arc<dyn JudgmentModel>>,
+    /// Why the judge could not be built (a rejected configuration), reported
+    /// by `vet` instead of `no_key`.
+    #[cfg(feature = "jev")]
+    judge_unavailable: Option<Unavailable>,
 }
 
 impl FmecaServer {
@@ -156,7 +174,26 @@ impl FmecaServer {
             engine,
             server_name: "fmeca-mcp".to_string(),
             server_version: env!("CARGO_PKG_VERSION").to_string(),
+            #[cfg(feature = "jev")]
+            judge: None,
+            #[cfg(feature = "jev")]
+            judge_unavailable: None,
         }
+    }
+
+    /// Set the judge `vet` asks (`None`: `vet` reports `vet_unavailable`).
+    #[cfg(feature = "jev")]
+    pub fn with_judge(mut self, judge: Option<Arc<dyn JudgmentModel>>) -> Self {
+        self.judge = judge;
+        self
+    }
+
+    /// Record why no judge could be built, so `vet` reports that reason
+    /// (e.g. `bad_config`) rather than `no_key`. Ignored while a judge is set.
+    #[cfg(feature = "jev")]
+    pub fn with_judge_unavailable(mut self, unavailable: Option<Unavailable>) -> Self {
+        self.judge_unavailable = unavailable;
+        self
     }
 
     /// Borrow the inner engine (tests drive state directly).
@@ -171,13 +208,89 @@ impl FmecaServer {
         Ok(())
     }
 
+    /// The transport-free path of `call_tool`: `vet` (async) is routed
+    /// here, every other tool to [`Self::dispatch_call`].
+    pub async fn call_tool_value(&self, request: CallToolRequestParams) -> Result<Value, McpError> {
+        #[cfg(feature = "jev")]
+        if request.name == TOOL_VET {
+            return self.vet(request_args(&request)).await;
+        }
+        self.dispatch_call(request)
+    }
+
+    /// The advisory `vet` tool: plan questions about a session or a one-shot
+    /// analysis, ask Jev, and report probabilities beside the deterministic
+    /// readiness gate. Never writes. A Jev failure is an `Ok` report with
+    /// `status: "vet_unavailable"`; only bad arguments are MCP errors.
+    #[cfg(feature = "jev")]
+    pub async fn vet(&self, args: Value) -> Result<Value, McpError> {
+        use crate::vet::{self as v, VetArgs};
+
+        let parsed: VetArgs = parse_args(args)?;
+        let max_questions = parsed.max_questions.unwrap_or(v::DEFAULT_MAX_QUESTIONS);
+        if max_questions > v::HARD_MAX_QUESTIONS {
+            return Err(McpError::invalid_params(
+                format!(
+                    "max_questions {max_questions} exceeds the hard cap of {}",
+                    v::HARD_MAX_QUESTIONS
+                ),
+                None,
+            ));
+        }
+        let checks: Vec<&str> = match &parsed.checks {
+            None => v::CHECKS.to_vec(),
+            Some(asked) => {
+                if asked.is_empty() {
+                    return Err(McpError::invalid_params(
+                        "checks must name at least one check",
+                        None,
+                    ));
+                }
+                if let Some(bad) = asked.iter().find(|c| !v::CHECKS.contains(&c.as_str())) {
+                    return Err(McpError::invalid_params(
+                        format!("unknown check '{bad}'; known: {}", v::CHECKS.join(", ")),
+                        None,
+                    ));
+                }
+                v::CHECKS
+                    .into_iter()
+                    .filter(|c| asked.iter().any(|a| a == c))
+                    .collect()
+            }
+        };
+        let subject = match (parsed.session_id, parsed.analysis) {
+            (Some(session_id), None) => {
+                let engine = self.engine.clone();
+                let state = tokio::task::spawn_blocking(move || engine.state(&session_id))
+                    .await
+                    .map_err(|e| McpError::internal_error(format!("vet read failed: {e}"), None))?
+                    .map_err(engine_error_to_mcp)?;
+                v::subject_from_state(&state)
+            }
+            (None, Some(analysis)) => {
+                v::subject_from_analysis(analysis.matrix_strategy, &analysis.failure_modes)
+                    .map_err(engine_error_to_mcp)?
+            }
+            _ => {
+                return Err(McpError::invalid_params(
+                    "pass exactly one of session_id and analysis",
+                    None,
+                ));
+            }
+        };
+        let judge = match &self.judge {
+            Some(judge) => Ok(judge.as_ref()),
+            None => Err(self
+                .judge_unavailable
+                .clone()
+                .unwrap_or_else(Unavailable::no_key)),
+        };
+        Ok(v::run_vet_with(judge, subject, &checks, max_questions).await)
+    }
+
     /// Transport-free dispatch entry point (tests call this directly).
     pub fn dispatch_call(&self, request: CallToolRequestParams) -> Result<Value, McpError> {
-        let args: Value = request
-            .arguments
-            .as_ref()
-            .map(|m| Value::Object(m.clone()))
-            .unwrap_or_else(|| json!({}));
+        let args = request_args(&request);
 
         match request.name.as_ref() {
             TOOL_SESSION_OPEN => self.handle_session_open(args),
@@ -188,6 +301,11 @@ impl FmecaServer {
             TOOL_REPORT_EXPORT => self.handle_export(args),
             TOOL_SCORING_CATALOG => self.handle_scoring_catalog(args),
             TOOL_ANALYZE => self.handle_analyze(args),
+            #[cfg(feature = "jev")]
+            TOOL_VET => Err(McpError::invalid_params(
+                "'vet' is async: call it through call_tool (or call_tool_value)",
+                None,
+            )),
             other => Err(McpError::invalid_params(
                 format!(
                     "Unknown tool '{other}'. Available: {}.",
@@ -302,7 +420,7 @@ impl ServerHandler for FmecaServer {
         info.protocol_version = ProtocolVersion::default();
         info.capabilities = ServerCapabilities::builder().enable_tools().build();
         info.server_info = server_info;
-        info.instructions = Some(instructions().to_string());
+        info.instructions = Some(instructions());
         info
     }
 
@@ -330,7 +448,9 @@ impl ServerHandler for FmecaServer {
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        self.dispatch_call(request).map(CallToolResult::structured)
+        self.call_tool_value(request)
+            .await
+            .map(CallToolResult::structured)
     }
 
     fn get_tool(&self, name: &str) -> Option<Tool> {
@@ -343,6 +463,14 @@ impl ServerHandler for FmecaServer {
 }
 
 // --- helpers ---------------------------------------------------------------
+
+fn request_args(request: &CallToolRequestParams) -> Value {
+    request
+        .arguments
+        .as_ref()
+        .map(|m| Value::Object(m.clone()))
+        .unwrap_or_else(|| json!({}))
+}
 
 fn parse_args<T: serde::de::DeserializeOwned>(args: Value) -> Result<T, McpError> {
     serde_json::from_value(args)
@@ -495,7 +623,57 @@ pub fn tool_definitions() -> Vec<Tool> {
             ),
             analyze_schema(),
         ),
+        #[cfg(feature = "jev")]
+        Tool::new(
+            Cow::Borrowed(TOOL_VET),
+            Cow::Borrowed(
+                "ADVISORY second opinion from Jev (a calibrated judgment model on OpenRouter; \
+                 needs OPENROUTER_API_KEY). Pass exactly one of session_id or analysis (the \
+                 analyze args shape). Asks up to max_questions (default 40, max 200) in four \
+                 checks: observations (do the claimed scoring.catalog observations apply; does \
+                 the next level up?), mitigations (how fully each addresses the cause; is its \
+                 declared kind right?), coverage (failure classes no failure mode covers) and \
+                 readiness (sound enough to sign off?). Returns {status: ok, model, usage{cost}, \
+                 readiness_gate, findings[]{check, target, question_hash, probability, \
+                 threshold, verdict (flag|ok; readiness concern|ok)}, skipped[] (unsent \
+                 question hashes), questions_sent} or {status: vet_unavailable, reason \
+                 (no_key|timeout|http_4xx|http_5xx|network|bad_response|bad_config), detail, \
+                 readiness_gate}. NEVER writes and NEVER changes a score: the readiness_gate is \
+                 the deterministic one; findings are probabilities to weigh, not verdicts. \
+                 Excluded failure modes are skipped.",
+            ),
+            vet_schema(),
+        ),
     ]
+}
+
+#[cfg(feature = "jev")]
+fn vet_schema() -> Arc<rmcp::model::JsonObject> {
+    let mut analysis = Value::Object((*analyze_schema()).clone());
+    analysis["description"] =
+        json!("A one-shot analysis in the analyze tool's argument shape. Not with session_id.");
+    schema_object(json!({
+        "type": "object",
+        "properties": {
+            "session_id": {
+                "type": "string",
+                "description": "The session to vet. Pass this or analysis, not both."
+            },
+            "analysis": analysis,
+            "checks": {
+                "type": "array",
+                "items": { "type": "string", "enum": crate::vet::CHECKS },
+                "description": "Optional. Which checks to run; default all four. Readiness and coverage are always asked before the per-failure-mode checks."
+            },
+            "max_questions": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": crate::vet::HARD_MAX_QUESTIONS,
+                "description": "Optional. Questions to send (default 40); the rest are listed in skipped. 0 sends none."
+            }
+        },
+        "additionalProperties": false
+    }))
 }
 
 fn session_id_schema() -> Arc<rmcp::model::JsonObject> {
@@ -621,8 +799,25 @@ fn analyze_schema() -> Arc<rmcp::model::JsonObject> {
     }))
 }
 
-fn instructions() -> &'static str {
-    r#"fmeca-mcp — a deterministic, offline structured-FMECA engine.
+fn instructions() -> String {
+    let mut text = BASE_INSTRUCTIONS.to_string();
+    if cfg!(feature = "jev") {
+        text.push_str(VET_INSTRUCTIONS);
+    }
+    text
+}
+
+const VET_INSTRUCTIONS: &str = r#"
+VET (advisory): vet asks Jev, a calibrated judgment model on OpenRouter, about a session
+or a one-shot analysis — do the claimed observations apply, do mitigations address their
+causes and match their declared kind, which failure classes are uncovered, is it ready to
+sign off — and reports probabilities beside the deterministic readiness gate. It needs
+OPENROUTER_API_KEY (otherwise status vet_unavailable, reason no_key). The probabilities
+are a second opinion: they NEVER change a score, an observation or the gate, and vet never
+appends. Act on a flag by revisiting the evidence and appending through the normal tools.
+"#;
+
+const BASE_INSTRUCTIONS: &str = r#"fmeca-mcp — a deterministic, offline structured-FMECA engine.
 
 You (the caller, an LLM) do the fuzzy work: naming failure modes, causes, effects,
 and proposing mitigations. This server owns STRUCTURE: a typed failure-mode /
@@ -633,7 +828,7 @@ gap detection (notify/clarify/remediate signals), a readiness gate, and report e
 Criticality, residual, and standing are COMPUTED (a pure fold over an append-only
 log), never stored. No LLM, no network in the kernel.
 
-Tools (eight; command/query split + one stateless batch):
+Tools (eight; command/query split + one stateless batch; plus the advisory vet below):
   session.open      — start/resume a session; optional matrix_strategy SELECTS the matrix;
                       returns FmecaState (incl. matrix_strategy, matrix_scale, scoring_catalog)
   append            — variant add_failure_mode | add_mitigation | rescore; returns state + signals
@@ -684,5 +879,4 @@ Domains: ux | runtime | architecture | delivery. Every fact carries a source
 EvidenceRef{turn_id}. Errors carry stable prefixes: SESSION_NOT_FOUND, BAD_SESSION_ID,
 INVALID_FAILURE_MODE, INVALID_MITIGATION, INVALID_RESCORE, INVALID_OBSERVATION,
 FM_NOT_FOUND, DUPLICATE_ID, STORE_ERROR.
-"#
-}
+"#;
