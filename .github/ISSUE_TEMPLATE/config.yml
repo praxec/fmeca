@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/praxec/fmeca/security/advisories/new
+    about: Privately report a vulnerability. Do not open a public issue.
+  - name: Support and usage questions
+    url: https://github.com/praxec/fmeca/blob/main/SUPPORT.md
+    about: Where to ask for help and what to include in a report.

@@ -19,4 +19,5 @@ serde_json = { workspace = true }
 thiserror = "2"
 
 [dev-dependencies]
+serde_yaml_ng = "0.10"
 tempfile = "3"
