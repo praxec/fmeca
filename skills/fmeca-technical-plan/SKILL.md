@@ -77,6 +77,9 @@ A design mitigation is `implemented` when its ADR or design PR merges. It is `ve
 the code that carries it exists and is tested, which usually happens at the implementation
 or verification level: record it there too.
 
+To propose concrete work, call `actions.suggest` with `actions.suggest.group_by` `tag`
+(see [fmeca-policy](../fmeca-policy/SKILL.md)); it only suggests.
+
 ## 6. Hand-off to the next level
 
 - With a cpm-planner plan, or delivery risk on the critical path → hand off to

@@ -176,6 +176,8 @@ expands variables, or let the server inherit it from the environment.
 | `analyze` | Stateless one-shot: hand over an entire analysis, get back the entire computed report. No session, no persistence. |
 | `session.list` | Every analysis in the state dir (the project's `.fmeca/` when there is one), with its metadata, standing counts (excluded failure modes are counted separately), `ready`, `ready_verified` and resolution counts. Filters: `level`, `aspect`, `parent`. A log that fails to replay is listed with its error. |
 | `vet` | Advisory: asks Jev (via OpenRouter, needs `OPENROUTER_API_KEY`) whether observations, mitigations, coverage and readiness hold up, and returns probabilities beside the deterministic gate. Never writes or changes a score; without a key it reports `vet_unavailable`. |
+| `actions.suggest` | Read-only. Reads a session (or an inline analysis) under a [risk policy](docs/policies.md) and suggests actions: per-failure-mode risk bands, evidence confidence, dispositions, tagged actions and a sign-off verdict. Never changes the analysis or the log. |
+| `policy.list` | Read-only. The built-in policy presets and the project's `.fmeca/policies/` files, each with its name, hash and class. A project file that does not load is listed with its `error`. |
 
 The `analyze` tool reuses the exact same kernel compute as the session path, so
 the two can never diverge.
@@ -192,6 +194,29 @@ Launch the server from the project root (or set `FMECA_STATE_DIR`) and it keeps
 one log per analysis in `.fmeca/`, named `<aspect>-<level>`. The setup, merge
 behaviour, Docker mount and the skill for each level are in
 [docs/AGENT-INSTALL.md](docs/AGENT-INSTALL.md#keep-analyses-in-your-repo-fmeca).
+
+## Risk policies
+
+A **risk policy** reads an analysis through your project's own risk bands, sets a
+sign-off rule, and suggests tagged actions (design, review, test, ops, process,
+docs, security). It is computed when you ask and is never written to the log, so
+one analysis can be read under several policies. fmeca suggests; it never acts.
+
+Presets: `compat-0.1` (the default; its sign-off equals `readiness.assess`),
+`prototype`, `standard`, `business-critical`, `safety-critical` and
+`confidence-view`. Your own policies are TOML files in `.fmeca/policies/<name>.toml`
+and resolve after the presets.
+
+```sh
+fmeca-mcp policy list                                   # presets and project files
+fmeca-mcp policy validate .fmeca/policies/team.toml     # ok <name> <hash>, or the error
+fmeca-mcp suggest checkout-implementation --policy standard --format markdown
+```
+
+`suggest` exits 0 when the policy's sign-off passes, 1 when it fails (usable in
+CI) and 2 on a usage or policy error. Agents call the same thing as the
+`actions.suggest` and `policy.list` tools. The model, every preset and the
+action catalog are in [docs/policies.md](docs/policies.md).
 
 ## Configuration
 

@@ -33,6 +33,14 @@ Run `readiness.assess {"session_id": "<id>"}`. Read:
 For a release, also check the analyses above it: `session.list` with the same `aspect`
 shows `ready` and `ready_verified` for every level at once.
 
+## 1b. The project's policy (optional)
+
+If the project has a risk policy (a `.fmeca/policies/` folder, or the user names a preset),
+run `actions.suggest {"session_id": "<id>", "policy": "<name>"}` and show its `signoff.pass`,
+`signoff.reasons` and `rollups.required_uncovered` **beside** the kernel gates, never instead
+of them. It is read-only. Name the policy and its hash. See
+[fmeca-policy](../fmeca-policy/SKILL.md). Without a policy, skip this.
+
 ## 2. Export
 
 Run `report.export {"session_id": "<id>"}`. It returns a row per failure mode (with its
@@ -53,6 +61,7 @@ with a false gate changes nothing. If it is unavailable, say so.
 ```text
 FMECA sign-off: <title> (<session_id>, level <level>)
 Gate:           ready=<true|false>  verified.ready=<true|false>   (applies: <which>)
+Policy:         <name> <hash>: signoff=<pass|fail>, uncovered required actions <n>   | none
 Jev readiness:  <p> against 0.5 (advisory)   | not run | unavailable: <reason>
 Failure modes:  <n> (acceptable <a>, under-mitigated <u>, unmitigated <m>), excluded <e>
 Mitigations:    planned <p>, implemented <i>, verified <v>, abandoned <x>

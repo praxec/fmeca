@@ -92,6 +92,9 @@ Evidence that verifies them (see [fmeca-resolve](../fmeca-resolve/SKILL.md)):
 - `conops`: the runbook or process document as `file`, basis `operational_use` once it has
   been exercised (a drill or a real incident).
 
+To propose concrete work, call `actions.suggest` with `actions.suggest.group_by` `tag`
+(see [fmeca-policy](../fmeca-policy/SKILL.md)); it only suggests.
+
 ## 6. Hand-off to the next level
 
 - After `concept`, open the `conops` with `parent` the concept.

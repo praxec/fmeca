@@ -98,7 +98,17 @@ Use `excluded` when the failure cannot happen, never because it is inconvenient.
 and listed in `excluded`. To undo an acceptance or exclusion, set the disposition back to
 `open` with a rationale.
 
-## 4. Report
+## 4. Use the policy's suggestions
+
+Under a risk policy, `actions.suggest` gives each failure mode a `status` with a `suggested`
+disposition and lists `rollups.review_overdue`, the acceptances past their review date. Use
+them to decide what to raise with the user: a failure mode suggested `accept` still needs a
+named approver, and an overdue acceptance needs a fresh decision. A `fallback` means the
+mitigation's evidence is too weak for the band: add the test or inspection evidence (section
+1), do not accept to make it go away. Acceptance, exclusion and status stay with the human.
+See [fmeca-policy](../fmeca-policy/SKILL.md).
+
+## 5. Report
 
 Run `readiness.assess` on every session you changed and report:
 - `ready` and `verified.ready`, with `verified.blockers`: what is still only claimed;

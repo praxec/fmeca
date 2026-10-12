@@ -308,6 +308,15 @@ fn output_keys() -> BTreeMap<String, BTreeSet<String>> {
     );
     out.insert("session.list".into(), call(&srv, "session.list", json!({})));
     out.insert(
+        "actions.suggest".into(),
+        call(
+            &srv,
+            "actions.suggest",
+            json!({"session_id": s, "policy": "safety-critical", "group_by": "tag"}),
+        ),
+    );
+    out.insert("policy.list".into(), call(&srv, "policy.list", json!({})));
+    out.insert(
         "analyze".into(),
         call(
             &srv,
