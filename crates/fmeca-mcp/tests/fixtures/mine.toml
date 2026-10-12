@@ -1,0 +1,54 @@
+# Self-contained test policy: one required and one optional action in `review`.
+name = "mine"
+description = "Test fixture policy"
+class = "standard"
+schema = 1
+
+[[bands]]
+id = "none"
+label = "No action"
+rank = 0
+dispositions = ["close", "accept"]
+
+[[bands]]
+id = "compensate"
+label = "Compensate"
+rank = 1
+dispositions = ["mitigate", "watch", "accept"]
+no_action_needs_rationale = true
+
+[[bands]]
+id = "review"
+label = "Review"
+rank = 2
+dispositions = ["mitigate", "research", "accept"]
+no_action_needs_rationale = true
+
+[matrices.qualitative3x3]
+derived_from = "qualitative3x3"
+cells = [
+  ["none",       "none",       "compensate"],
+  ["none",       "compensate", "review"],
+  ["compensate", "review",     "review"],
+]
+
+[signoff]
+max_residual_band = "compensate"
+accepted_counts_as_pass = true
+accepted_requires_review_current = false
+include_kernel_gate = true
+
+[[actions]]
+id = "design-review"
+text = "Hold a design review"
+tags = ["review", "design"]
+precedence = "eliminate"
+applies_when = { band_at_least = "review" }
+required_when = { band_at_least = "review" }
+
+[[actions]]
+id = "write-docs"
+text = "Document the failure path"
+tags = ["docs"]
+precedence = "procedure"
+applies_when = { band_at_least = "review" }

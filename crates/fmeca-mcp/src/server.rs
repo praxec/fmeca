@@ -850,7 +850,7 @@ pub fn tool_definitions() -> Vec<Tool> {
                  failure_modes[]{id, inherent_band, residual_band, effective_band, confidence, \
                  fallback?, status, rationale_needed, actions[]}, excluded[], rollups, \
                  signoff{pass,reasons[]}, groups?}. Errors: POLICY_NOT_FOUND, INVALID_POLICY, \
-                 POLICY_STRATEGY_MISMATCH.",
+                 POLICY_STRATEGY_MISMATCH; a malformed as_of reports INVALID_POLICY: date: ....",
             ),
             actions_suggest_schema(),
         ),
@@ -1185,7 +1185,8 @@ fn actions_suggest_schema() -> Arc<rmcp::model::JsonObject> {
                     "matrix_strategy": { "type": "string", "enum": MATRIX_STRATEGY_IDS },
                     "failure_modes": { "type": "array", "items": { "type": "object" } }
                 },
-                "required": ["failure_modes"]
+                "required": ["failure_modes"],
+                "additionalProperties": false
             },
             "policy": {
                 "type": "string",
@@ -1193,6 +1194,7 @@ fn actions_suggest_schema() -> Arc<rmcp::model::JsonObject> {
             },
             "as_of": {
                 "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                 "description": "YYYY-MM-DD. Default: today (UTC). Echoed back."
             },
             "bands": {

@@ -11,6 +11,7 @@ use fmeca_mcp::{
     FmecaServer, TOOL_ACTIONS_SUGGEST, TOOL_APPEND, TOOL_POLICY_LIST, TOOL_SESSION_OPEN,
 };
 use rmcp::model::CallToolRequestParams;
+use rmcp::model::ErrorCode;
 use serde_json::{Value, json};
 
 struct Fixture {
@@ -89,10 +90,10 @@ fn policies_dir(f: &Fixture) -> PathBuf {
     dir
 }
 
-/// A valid project policy: the `standard` preset renamed.
+/// A valid project policy: the self-contained fixture, renamed.
 fn write_project_policy(dir: &Path, name: &str) {
-    let text = include_str!("../../fmeca-policy/presets/standard.toml")
-        .replace("name = \"standard\"", &format!("name = \"{name}\""));
+    let text = include_str!("fixtures/mine.toml")
+        .replace("name = \"mine\"", &format!("name = \"{name}\""));
     fs::write(dir.join(format!("{name}.toml")), text).unwrap();
 }
 
@@ -171,11 +172,23 @@ fn suggest_rejects_neither_session_nor_analysis() {
 fn policy_name_with_path_is_not_found() {
     let f = fixture();
     session(&f, &["fm1"]);
-    let err = suggest(
-        &f,
-        json!({ "session_id": "s1", "policy": "../../etc/passwd" }),
-    )
-    .unwrap_err();
+    policies_dir(&f);
+    // A valid policy one level above the policies dir: a traversal would load it.
+    write_project_policy(&f.state_dir, "escape");
+    let err = suggest(&f, json!({ "session_id": "s1", "policy": "../escape" })).unwrap_err();
+    assert!(
+        err.message.starts_with("POLICY_NOT_FOUND"),
+        "{}",
+        err.message
+    );
+}
+
+#[test]
+fn absolute_policy_path_is_not_found() {
+    let f = fixture();
+    session(&f, &["fm1"]);
+    policies_dir(&f);
+    let err = suggest(&f, json!({ "session_id": "s1", "policy": "/etc/passwd" })).unwrap_err();
     assert!(
         err.message.starts_with("POLICY_NOT_FOUND"),
         "{}",
@@ -194,6 +207,15 @@ fn invalid_project_policy_is_invalid_params() {
     .unwrap();
     let err = suggest(&f, json!({ "session_id": "s1", "policy": "broken" })).unwrap_err();
     assert!(err.message.starts_with("INVALID_POLICY"), "{}", err.message);
+}
+
+#[test]
+fn invalid_project_policy_has_invalid_params_code() {
+    let f = fixture();
+    session(&f, &["fm1"]);
+    fs::write(policies_dir(&f).join("broken.toml"), "bogus = 1\n").unwrap();
+    let err = suggest(&f, json!({ "session_id": "s1", "policy": "broken" })).unwrap_err();
+    assert_eq!(err.code, ErrorCode::INVALID_PARAMS);
 }
 
 #[test]
@@ -218,20 +240,60 @@ fn group_by_tag_groups_actions() {
 }
 
 #[test]
-fn required_only_filters_suggested() {
+fn required_only_keeps_only_required_actions() {
     let f = fixture();
     session(&f, &["fm1"]);
-    let all = suggest(&f, json!({ "session_id": "s1", "policy": "standard" })).unwrap();
-    let only = suggest(
+    write_project_policy(&policies_dir(&f), "mine");
+    let out = suggest(
         &f,
-        json!({ "session_id": "s1", "policy": "standard", "required_only": true }),
+        json!({ "session_id": "s1", "policy": "mine", "required_only": true }),
     )
     .unwrap();
-    let expected: Vec<Value> = first_fm_actions(&all)
-        .into_iter()
-        .filter(|a| a["required"] == true)
+    let actions = first_fm_actions(&out);
+    assert!(!actions.is_empty() && actions.iter().all(|a| a["required"] == true));
+}
+
+#[test]
+fn fixture_policy_suggests_a_required_and_an_optional_action() {
+    let f = fixture();
+    session(&f, &["fm1"]);
+    write_project_policy(&policies_dir(&f), "mine");
+    let all = suggest(&f, json!({ "session_id": "s1", "policy": "mine" })).unwrap();
+    let required: Vec<bool> = first_fm_actions(&all)
+        .iter()
+        .map(|a| a["required"] == true)
         .collect();
-    assert_eq!(first_fm_actions(&only), expected);
+    // Precedence order: the required `eliminate` action, then the optional one.
+    assert_eq!(required, [true, false]);
+}
+
+#[test]
+fn bands_filter_keeps_failure_modes_in_a_listed_band() {
+    let f = fixture();
+    session(&f, &["fm1"]);
+    let out = suggest(
+        &f,
+        json!({ "session_id": "s1", "policy": "standard", "bands": ["review"] }),
+    )
+    .unwrap();
+    assert_eq!(out["failure_modes"][0]["id"], "fm1");
+}
+
+#[test]
+fn tags_filter_keeps_actions_with_any_listed_tag() {
+    let f = fixture();
+    session(&f, &["fm1"]);
+    write_project_policy(&policies_dir(&f), "mine");
+    let out = suggest(
+        &f,
+        json!({ "session_id": "s1", "policy": "mine", "tags": ["docs", "nope"] }),
+    )
+    .unwrap();
+    let ids: Vec<Value> = first_fm_actions(&out)
+        .iter()
+        .map(|a| a["id"].clone())
+        .collect();
+    assert_eq!(ids, [json!("write-docs")]);
 }
 
 #[test]
@@ -246,10 +308,15 @@ fn as_of_is_echoed() {
 fn as_of_defaults_to_the_server_utc_date() {
     let f = fixture();
     session(&f, &["fm1"]);
+    let today = || time::OffsetDateTime::now_utc().date().to_string();
+    let before = today();
     let out = suggest(&f, json!({ "session_id": "s1" })).unwrap();
-    let today = time::OffsetDateTime::now_utc().date().to_string();
-    // A midnight rollover between the two reads would flake; both are UTC dates.
-    assert_eq!(out["as_of"], today);
+    let after = today();
+    let got = out["as_of"].as_str().unwrap();
+    assert!(
+        got == before || got == after,
+        "{got} not in {before}..{after}"
+    );
 }
 
 #[test]
@@ -336,6 +403,50 @@ fn policy_list_without_project_dir_has_empty_project() {
     let f = fixture();
     let out = call(&f.srv, TOOL_POLICY_LIST, json!({})).unwrap();
     assert_eq!(out["project"], json!([]));
+}
+
+#[test]
+fn project_file_named_like_a_preset_is_reported_as_shadowed() {
+    let f = fixture();
+    write_project_policy(&policies_dir(&f), "standard");
+    let out = call(&f.srv, TOOL_POLICY_LIST, json!({})).unwrap();
+    assert_eq!(
+        out["project"][0]["error"],
+        "POLICY_NOT_FOUND: standard: shadowed by the built-in preset"
+    );
+}
+
+fn plain_state_server() -> (FmecaServer, tempfile::TempDir) {
+    let tmp = tempfile::tempdir().unwrap();
+    let state = tmp.path().join("state");
+    fs::create_dir_all(state.join("policies")).unwrap();
+    write_project_policy(&state.join("policies"), "mine");
+    let engine = Engine::new(Arc::new(FilesystemStore::new(&state).unwrap()));
+    (FmecaServer::new(engine).with_state_dir(state), tmp)
+}
+
+#[test]
+fn state_dir_not_named_dot_fmeca_has_no_project_policies() {
+    let (srv, _tmp) = plain_state_server();
+    let out = call(&srv, TOOL_POLICY_LIST, json!({})).unwrap();
+    assert_eq!(out["project"], json!([]));
+}
+
+#[test]
+fn project_policy_in_state_dir_not_named_dot_fmeca_is_not_found() {
+    let (srv, _tmp) = plain_state_server();
+    call(&srv, TOOL_SESSION_OPEN, json!({ "session_id": "s1" })).unwrap();
+    let err = call(
+        &srv,
+        TOOL_ACTIONS_SUGGEST,
+        json!({ "session_id": "s1", "policy": "mine" }),
+    )
+    .unwrap_err();
+    assert!(
+        err.message.starts_with("POLICY_NOT_FOUND"),
+        "{}",
+        err.message
+    );
 }
 
 #[test]

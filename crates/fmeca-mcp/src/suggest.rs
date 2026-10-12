@@ -153,7 +153,11 @@ pub fn policy_list(state_dir: &Path, args: Value) -> Result<Value, McpError> {
             .collect();
         stems.sort();
         for stem in stems {
-            let loaded = if valid_policy_name(&stem) {
+            let loaded = if preset(&stem).is_some() {
+                Err(PolicyError::NotFound(format!(
+                    "{stem}: shadowed by the built-in preset"
+                )))
+            } else if valid_policy_name(&stem) {
                 load_project_policy(&dir, &stem)
             } else {
                 Err(PolicyError::NotFound(format!(
