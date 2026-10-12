@@ -16,7 +16,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (MIL-STD-882E) and `confidence-view`.
 - Server (`fmeca-mcp`): `actions.suggest` and `policy.list` MCP tools.
 - CLI: `suggest`, `policy validate` and `policy list` with markdown output.
-- Docs: the `fmeca-policy` skill and `docs/policies.md`.
+- Policy keys beyond the 0.2 design: `signoff.include_kernel_gate` (default
+  `true`), `signoff.unscored_fails` (default `true`), and the conditions
+  `rank_at_least` (band-agnostic, for the shared action catalog) and
+  `mitigation_kinds_present`.
+- Kernel gate in sign-off: `include_kernel_gate` adds the kernel's hygiene
+  blockers (CLARIFY, weak mitigation order, EMPTY) but never its RESIDUAL
+  zone blockers, so `max_residual_band` decides which residuals pass.
+- Fallback threshold: a residual needs the highest `min_confidence` of its
+  own band and of every band the claimed reduction leaves, so a bigger claimed
+  reduction never needs less evidence (provisional maintainer ruling).
+- `compat-0.1` sets `unscored_fails = false`, so an accepted, unscored failure
+  mode passes as in 0.1 readiness, while an open one still fails (CLARIFY).
+- Docs: the `fmeca-policy` skill (with a complete `policy-template.toml`),
+  `docs/policies.md` and the `fmeca-policy` crate README.
+
+### Changed
+
+- `fmeca` (the kernel) is republished at 0.2.0 alongside `fmeca-policy`, with
+  no API change.
 
 ### Fixed
 
