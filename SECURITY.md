@@ -28,13 +28,16 @@ credit reporters who wish to be named.
 ## Scope
 
 fmeca-mcp is a deterministic, offline MCP server that speaks over stdio. Its
-persistent state is a single append-only event log under `FMECA_STATE_DIR`
-(and its `$XDG_DATA_HOME` / `$HOME/.local/share` / `./fmeca-state` fallbacks).
-Its inputs are failure modes, mitigations, and observation ids.
+persistent state is one append-only event log per analysis (session), under the
+resolved state directory: `FMECA_STATE_DIR`, else the nearest `.fmeca/`
+directory above the working directory, else the user data directory
+(`$XDG_DATA_HOME/fmeca-mcp`, `$HOME/.local/share/fmeca-mcp`, or
+`./fmeca-state`). `skills install` also writes small per-user lock files under
+the user cache directory. Its inputs are failure modes, mitigations, and observation ids.
 
 Of particular interest:
 
-- The event log under `FMECA_STATE_DIR`: any input (a crafted `analyze`
+- The event logs in the state directory: any input (a crafted `analyze`
   payload, `append` sequence, or session id) that causes a panic, a hang, or a
   path-traversal write outside the state directory.
 - `skills install`: the installer must write only under the selected project or
