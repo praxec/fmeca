@@ -36,9 +36,9 @@ use fmeca::{
 };
 use rmcp::ErrorData as McpError;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, Implementation, InitializeRequestParams,
-    InitializeResult, ListToolsResult, PaginatedRequestParams, ProtocolVersion, ServerCapabilities,
-    ServerInfo, Tool,
+    CallToolRequestParams, CallToolResponse, CallToolResult, Implementation,
+    InitializeRequestParams, InitializeResult, ListToolsResult, PaginatedRequestParams,
+    ProtocolVersion, ServerCapabilities, ServerConfig, Tool,
 };
 use rmcp::service::{NotificationContext, RequestContext, RoleServer};
 use rmcp::transport::stdio;
@@ -545,7 +545,7 @@ impl FmecaServer {
 // --- ServerHandler ---------------------------------------------------------
 
 impl ServerHandler for FmecaServer {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> ServerConfig {
         let mut server_info =
             Implementation::new(self.server_name.clone(), self.server_version.clone());
         server_info.title = Some("fmeca-mcp".to_string());
@@ -583,10 +583,10 @@ impl ServerHandler for FmecaServer {
         &self,
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<CallToolResponse, McpError> {
         self.call_tool_value(request)
             .await
-            .map(CallToolResult::structured)
+            .map(|value| CallToolResult::structured(value).into())
     }
 
     fn get_tool(&self, name: &str) -> Option<Tool> {
