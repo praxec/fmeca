@@ -114,10 +114,11 @@ docker run -i --rm ghcr.io/praxec/fmeca:0.1.0
 ```
 
 Mount your project to keep analyses in its `.fmeca/` folder (without a mount
-the state is lost when the container exits):
+the state is lost when the container exits). `FMECA_STATE_DIR` points the
+server at that folder even before `fmeca-mcp init` has created it:
 
 ```sh
-docker run -i --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
+docker run -i --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work -e FMECA_STATE_DIR=/work/.fmeca -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
 ```
 
 ### From source
@@ -173,7 +174,7 @@ expands variables, or let the server inherit it from the environment.
 | `report.export` | The full FMECA table for the session. |
 | `scoring.catalog` | The fixed observation vocabulary for a strategy — the ids the caller draws from. |
 | `analyze` | Stateless one-shot: hand over an entire analysis, get back the entire computed report. No session, no persistence. |
-| `session.list` | Every analysis in the state dir (the project's `.fmeca/` when there is one), with its metadata, standing counts, `ready`, `ready_verified` and resolution counts. Filters: `level`, `aspect`, `parent`. A log that fails to replay is listed with its error. |
+| `session.list` | Every analysis in the state dir (the project's `.fmeca/` when there is one), with its metadata, standing counts (excluded failure modes are counted separately), `ready`, `ready_verified` and resolution counts. Filters: `level`, `aspect`, `parent`. A log that fails to replay is listed with its error. |
 | `vet` | Advisory: asks Jev (via OpenRouter, needs `OPENROUTER_API_KEY`) whether observations, mitigations, coverage and readiness hold up, and returns probabilities beside the deterministic gate. Never writes or changes a score; without a key it reports `vet_unavailable`. |
 
 The `analyze` tool reuses the exact same kernel compute as the session path, so
@@ -209,8 +210,8 @@ locked S×P matrix and its own scoring catalog:
 
 | Strategy | Scale | Notes |
 |----------|-------|-------|
-| `qualitative_3x3` | Low / Medium / High | The default 3×3 qualitative matrix. |
-| `nasa_8004_5x5` | 5×5 consequence × likelihood | The NASA GSFC-HDBK-8004 risk matrix. |
+| `qualitative3x3` | Low / Medium / High | The default 3×3 qualitative matrix. |
+| `nasa8004_5x5` | 5×5 consequence × likelihood | The NASA GSFC-HDBK-8004 risk matrix. |
 
 The caller *selects* a strategy; it never edits a strategy's cells.
 
