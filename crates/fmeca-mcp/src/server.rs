@@ -19,6 +19,8 @@
 //! | `scoring.catalog`  | query   | [`fmeca::catalog`]        |
 //! | `analyze`          | batch   | [`fmeca::analyze()`]      |
 //! | `session.list`     | query   | [`Engine::list_sessions`] + [`Engine::state`] |
+//! | `actions.suggest`  | query   | `fmeca_policy::evaluate` |
+//! | `policy.list`      | query   | `fmeca_policy::preset` + project files |
 //! | `vet`              | advisory | Jev second opinion (feature `jev`) |
 //!
 //! Errors propagate the kernel's stable prefixes (`SESSION_NOT_FOUND`,
@@ -60,6 +62,10 @@ pub const TOOL_SCORING_CATALOG: &str = "scoring.catalog";
 pub const TOOL_ANALYZE: &str = "analyze";
 /// Lists the analyses in the state dir with their metadata and gates.
 pub const TOOL_SESSION_LIST: &str = "session.list";
+/// Suggests actions for an analysis under a declarative risk policy (read-only).
+pub const TOOL_ACTIONS_SUGGEST: &str = "actions.suggest";
+/// Lists the built-in and project risk policies (read-only).
+pub const TOOL_POLICY_LIST: &str = "policy.list";
 /// The advisory Jev tool (feature `jev`): probabilities beside the
 /// deterministic results, never instead of them.
 #[cfg(feature = "jev")]
@@ -79,6 +85,8 @@ pub const TOOL_NAMES: &[&str] = &[
     TOOL_SCORING_CATALOG,
     TOOL_ANALYZE,
     TOOL_SESSION_LIST,
+    TOOL_ACTIONS_SUGGEST,
+    TOOL_POLICY_LIST,
     #[cfg(feature = "jev")]
     TOOL_VET,
 ];
@@ -356,6 +364,10 @@ impl FmecaServer {
             TOOL_SCORING_CATALOG => self.handle_scoring_catalog(args),
             TOOL_ANALYZE => self.handle_analyze(args),
             TOOL_SESSION_LIST => self.handle_session_list(args),
+            TOOL_ACTIONS_SUGGEST => {
+                crate::suggest::actions_suggest(&self.engine, &self.state_dir, args)
+            }
+            TOOL_POLICY_LIST => crate::suggest::policy_list(&self.state_dir, args),
             #[cfg(feature = "jev")]
             TOOL_VET => Err(McpError::invalid_params(
                 "'vet' is async: call it through call_tool (or call_tool_value)",
@@ -661,12 +673,12 @@ fn request_args(request: &CallToolRequestParams) -> Value {
         .unwrap_or_else(|| json!({}))
 }
 
-fn parse_args<T: serde::de::DeserializeOwned>(args: Value) -> Result<T, McpError> {
+pub(crate) fn parse_args<T: serde::de::DeserializeOwned>(args: Value) -> Result<T, McpError> {
     serde_json::from_value(args)
         .map_err(|e| McpError::invalid_params(format!("invalid arguments: {e}"), None))
 }
 
-fn to_value<T: Serialize>(value: &T) -> Result<Value, McpError> {
+pub(crate) fn to_value<T: Serialize>(value: &T) -> Result<Value, McpError> {
     serde_json::to_value(value)
         .map_err(|e| McpError::internal_error(format!("response serialisation failed: {e}"), None))
 }
@@ -674,7 +686,7 @@ fn to_value<T: Serialize>(value: &T) -> Result<Value, McpError> {
 /// Map a kernel error to an MCP error, preserving the stable prefix in the
 /// message. `BAD_SESSION_ID` / `INVALID_*` / `DUPLICATE_ID` are caller bugs
 /// (`invalid_params`); the rest are surfaced as `internal_error`.
-fn engine_error_to_mcp(err: FmecaError) -> McpError {
+pub(crate) fn engine_error_to_mcp(err: FmecaError) -> McpError {
     let msg = err.to_string();
     match err {
         FmecaError::BadSessionId(_)
@@ -689,7 +701,7 @@ fn engine_error_to_mcp(err: FmecaError) -> McpError {
     }
 }
 
-fn schema_object(value: Value) -> Arc<rmcp::model::JsonObject> {
+pub(crate) fn schema_object(value: Value) -> Arc<rmcp::model::JsonObject> {
     debug_assert!(value.is_object(), "schema_object expects an object literal");
     let obj = match value.as_object() {
         Some(o) => o.clone(),
@@ -822,6 +834,35 @@ pub fn tool_definitions() -> Vec<Tool> {
                  of failing the call (such rows are kept whatever the filters).",
             ),
             session_list_schema(),
+        ),
+        Tool::new(
+            Cow::Borrowed(TOOL_ACTIONS_SUGGEST),
+            Cow::Borrowed(
+                "READ-ONLY. Read an analysis under a declarative risk policy and SUGGEST actions; \
+                 it never changes the analysis or appends to the log. Pass exactly one of \
+                 session_id or analysis ({matrix_strategy?, failure_modes[]} as for analyze). \
+                 Optional: policy (a preset name or a file name in .fmeca/policies/, no paths; \
+                 default compat-0.1), as_of (YYYY-MM-DD; default today, UTC; echoed back), bands[] \
+                 (keep failure modes in these effective bands), tags[] (keep actions with any of \
+                 these tags), required_only (keep only required actions), group_by \
+                 (failure_mode|band|tag|action). Roll-ups and signoff always cover the whole \
+                 analysis. Returns {policy{name,hash,class,matrix_derived_from,source}, as_of, \
+                 failure_modes[]{id, inherent_band, residual_band, effective_band, confidence, \
+                 fallback?, status, rationale_needed, actions[]}, excluded[], rollups, \
+                 signoff{pass,reasons[]}, groups?}. Errors: POLICY_NOT_FOUND, INVALID_POLICY, \
+                 POLICY_STRATEGY_MISMATCH.",
+            ),
+            actions_suggest_schema(),
+        ),
+        Tool::new(
+            Cow::Borrowed(TOOL_POLICY_LIST),
+            Cow::Borrowed(
+                "READ-ONLY. List the risk policies actions.suggest accepts: {presets[], \
+                 project[]}, each {name, hash, class, description, source}. Project policies are \
+                 the files in .fmeca/policies/; one that fails to load is listed with an error \
+                 instead of failing the call.",
+            ),
+            policy_list_schema(),
         ),
         #[cfg(feature = "jev")]
         Tool::new(
@@ -1126,6 +1167,66 @@ fn analyze_schema() -> Arc<rmcp::model::JsonObject> {
     }))
 }
 
+/// Schema for `actions.suggest`: one flat object, no top-level
+/// `oneOf`/`anyOf`/`allOf`; the handler enforces exactly one of
+/// `session_id` / `analysis`.
+fn actions_suggest_schema() -> Arc<rmcp::model::JsonObject> {
+    schema_object(json!({
+        "type": "object",
+        "properties": {
+            "session_id": {
+                "type": "string",
+                "description": "A session to read. Pass exactly one of session_id and analysis."
+            },
+            "analysis": {
+                "type": "object",
+                "description": "A one-shot analysis, the same envelope as the analyze tool. Pass exactly one of session_id and analysis.",
+                "properties": {
+                    "matrix_strategy": { "type": "string", "enum": MATRIX_STRATEGY_IDS },
+                    "failure_modes": { "type": "array", "items": { "type": "object" } }
+                },
+                "required": ["failure_modes"]
+            },
+            "policy": {
+                "type": "string",
+                "description": "A preset name or a file name in .fmeca/policies/ (no paths, no ..). Default compat-0.1."
+            },
+            "as_of": {
+                "type": "string",
+                "description": "YYYY-MM-DD. Default: today (UTC). Echoed back."
+            },
+            "bands": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Keep only failure modes whose effective band is listed."
+            },
+            "tags": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Keep only actions carrying any of these tags."
+            },
+            "required_only": {
+                "type": "boolean",
+                "description": "Keep only required actions."
+            },
+            "group_by": {
+                "type": "string",
+                "enum": ["failure_mode", "band", "tag", "action"],
+                "description": "Add a groups map."
+            }
+        },
+        "additionalProperties": false
+    }))
+}
+
+fn policy_list_schema() -> Arc<rmcp::model::JsonObject> {
+    schema_object(json!({
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+    }))
+}
+
 fn instructions() -> String {
     let mut text = BASE_INSTRUCTIONS.to_string();
     if cfg!(feature = "jev") {
@@ -1175,6 +1276,9 @@ Tools (the eight core tools: command/query split + one stateless batch; plus ses
                       deterministic + idempotent, same compute as the session path.
   session.list      — every analysis in the state dir with its metadata, standing counts,
                       ready, ready_verified and resolution counts (filters: level, aspect, parent)
+
+POLICIES (read-only): actions.suggest reads an analysis under a declarative policy and suggests
+actions; it never changes the analysis. policy.list shows the presets and .fmeca/policies/ files.
 
 PROJECT STORE AND RESOLUTION:
   Analyses live in the project's .fmeca/ folder, one <session_id>.jsonl per analysis.
