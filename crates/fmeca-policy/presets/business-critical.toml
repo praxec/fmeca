@@ -1,0 +1,77 @@
+# `business-critical` — standard bands, tighter evidence and tailoring for
+# work where failure is expensive (spec §6). Prevention is required before
+# detection on `review`, and a single point of failure in `review` must be
+# mitigated.
+
+name = "business-critical"
+description = "Production software where failure is expensive"
+class = "business-critical"
+schema = 1
+include_builtin_actions = true
+
+[[bands]]
+id = "none"
+label = "No action"
+rank = 0
+dispositions = ["close", "accept"]
+
+[[bands]]
+id = "compensate"
+label = "Compensating action required"
+rank = 1
+dispositions = ["mitigate", "watch", "accept"]
+no_action_needs_rationale = true
+min_confidence = "C2"
+acceptance = "tech_lead"
+review_interval = "90d"
+
+[[bands]]
+id = "review"
+label = "Compensating actions with deliverable review and re-evaluation"
+rank = 2
+dispositions = ["mitigate", "research", "elevate", "accept"]
+no_action_needs_rationale = true
+min_confidence = "C3"
+acceptance = "eng_manager"
+concurrence = ["tech_lead", "product_owner"]
+review_interval = "90d"
+
+[matrices.nasa8004_5x5]
+derived_from = "nasa8004_5x5"
+cells = [
+  ["none",       "none",       "none",       "compensate", "compensate"],
+  ["none",       "none",       "compensate", "compensate", "review"],
+  ["none",       "compensate", "compensate", "review",     "review"],
+  ["compensate", "compensate", "review",     "review",     "review"],
+  ["compensate", "review",     "review",     "review",     "review"],
+]
+
+[matrices.qualitative3x3]
+derived_from = "qualitative3x3"
+cells = [
+  ["none",       "none",       "compensate"],
+  ["none",       "compensate", "review"],
+  ["compensate", "review",     "review"],
+]
+
+[signoff]
+max_residual_band = "compensate"
+accepted_counts_as_pass = true
+accepted_requires_review_current = true
+include_kernel_gate = true
+
+[[actions]]
+id = "require-prevention"
+text = "Prevent the failure by design before adding detection on a review-band risk"
+tags = ["design", "process"]
+precedence = "prevent"
+applies_when = { band_in = ["review"] }
+required_when = { band_in = ["review"], mitigation_kinds_missing = ["prevention"] }
+
+[[actions]]
+id = "mitigate-single-point"
+text = "Mitigate the single point of failure with an implemented prevention"
+tags = ["design", "ops"]
+precedence = "prevent"
+applies_when = { band_in = ["review"], single_point = true }
+required_when = { band_in = ["review"], single_point = true }

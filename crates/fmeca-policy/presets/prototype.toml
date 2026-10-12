@@ -1,0 +1,54 @@
+# `prototype` — fast-moving work where remediation is expected but a report is
+# acceptable (spec §6): none / report / remediate.
+
+name = "prototype"
+description = "Fast-moving prototype work"
+class = "prototype"
+schema = 1
+include_builtin_actions = true
+
+[[bands]]
+id = "none"
+label = "No action"
+rank = 0
+dispositions = ["close", "accept"]
+
+[[bands]]
+id = "report"
+label = "Report the risk"
+rank = 1
+dispositions = ["watch", "accept", "mitigate"]
+no_action_needs_rationale = true
+
+[[bands]]
+id = "remediate"
+label = "Remediate before shipping"
+rank = 2
+dispositions = ["mitigate", "research", "accept"]
+no_action_needs_rationale = true
+acceptance = "owner"
+review_interval = "365d"
+
+[matrices.qualitative3x3]
+derived_from = "qualitative3x3"
+cells = [
+  ["none",   "none",     "report"],
+  ["none",   "report",   "remediate"],
+  ["report", "remediate", "remediate"],
+]
+
+[matrices.nasa8004_5x5]
+derived_from = "nasa8004_5x5"
+cells = [
+  ["none",   "none",   "none",     "report",   "report"],
+  ["none",   "none",   "report",   "report",   "remediate"],
+  ["none",   "report", "report",   "remediate", "remediate"],
+  ["report", "report", "remediate", "remediate", "remediate"],
+  ["report", "remediate", "remediate", "remediate", "remediate"],
+]
+
+[signoff]
+max_residual_band = "report"
+accepted_counts_as_pass = true
+accepted_requires_review_current = false
+include_kernel_gate = true

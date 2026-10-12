@@ -29,9 +29,9 @@
 //!
 //! A policy with a `confidence` matrix maps (standard band rank, confidence)
 //! to its own band. The standard band is the effective band computed under
-//! the built-in `standard` preset. Until Task 3 adds that preset,
-//! [`evaluate`] computes it under the policy's own S×P matrix and bands; the
-//! row is the band's position in rank order.
+//! the built-in `standard` preset; [`evaluate`] supplies it through the
+//! crate-private [`evaluate_with`] hook, together with the built-in action
+//! catalog.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -383,16 +383,17 @@ const UNSCORED: &str = "unscored";
 /// the subject's strategy; [`PolicyError::Invalid`] only for a policy that
 /// was not [validated](crate::validate()).
 ///
-/// Built-in actions (`include_builtin_actions`) and the `standard` preset for
-/// confidence matrices arrive with the presets (Task 3); until then the
-/// built-in catalog is empty and a confidence matrix reads its rows from the
-/// policy's own S×P bands.
+/// Built-in actions (`include_builtin_actions`) come from the shared catalog,
+/// and a `confidence` matrix reads its rows from the built-in `standard`
+/// preset, both supplied through [`evaluate_with`].
 pub fn evaluate(
     subject: &Subject,
     policy: &LoadedPolicy,
     as_of: Date,
 ) -> Result<Suggestions, PolicyError> {
-    evaluate_with(subject, policy, None, &[], as_of)
+    let standard = crate::presets::standard_policy();
+    let builtin = crate::presets::builtin_actions();
+    evaluate_with(subject, policy, standard.as_ref(), &builtin, as_of)
 }
 
 /// [`evaluate`] with the `standard` preset (for confidence matrices; `None`

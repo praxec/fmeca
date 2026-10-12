@@ -1,0 +1,64 @@
+{
+  "policy": {
+    "name": "compat-0.1",
+    "hash": "5a2d4f4185b7aade7e839dbfdc8a7caf2468169591a69c617f2676d65c753949",
+    "class": "compat-0.1",
+    "matrix_derived_from": "qualitative3x3",
+    "source": "preset"
+  },
+  "as_of": "2026-10-12",
+  "failure_modes": [
+    {
+      "id": "fm-a",
+      "inherent_band": "mitigate",
+      "residual_band": "mitigate",
+      "effective_band": "mitigate",
+      "confidence": "C0",
+      "fallback": null,
+      "status": {
+        "state": "open",
+        "suggested": "mitigate"
+      },
+      "rationale_needed": true,
+      "actions": []
+    },
+    {
+      "id": "fm-b",
+      "inherent_band": "mitigate",
+      "residual_band": "none",
+      "effective_band": "none",
+      "confidence": "C2",
+      "fallback": null,
+      "status": {
+        "state": "open",
+        "suggested": "close"
+      },
+      "rationale_needed": false,
+      "actions": []
+    }
+  ],
+  "excluded": [],
+  "rollups": {
+    "by_band": {
+      "mitigate": 1,
+      "none": 1
+    },
+    "by_confidence": {
+      "C0": 1,
+      "C2": 1
+    },
+    "by_status": {
+      "open": 2
+    },
+    "required_uncovered": [],
+    "accepted_by_role": {},
+    "review_overdue": [],
+    "fallbacks": []
+  },
+  "signoff": {
+    "pass": false,
+    "reasons": [
+      "fm-a: effective band `mitigate` ranks above max_residual_band `none`"
+    ]
+  }
+}

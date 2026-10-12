@@ -23,6 +23,7 @@
 //!   [confidence ladder](evidence_confidence).
 
 pub mod model;
+pub mod presets;
 
 mod confidence;
 mod eval;
@@ -45,6 +46,7 @@ pub use model::{
     Action, Band, Conditions, Confidence, DispositionKind, Matrix, Policy, Precedence,
     SCHEMA_VERSION, Signoff,
 };
+pub use presets::{PRESET_NAMES, builtin_actions, preset, resolve};
 pub use validate::{STANDARD_BAND_COUNT, parse_days, validate};
 
 use serde::Serialize;

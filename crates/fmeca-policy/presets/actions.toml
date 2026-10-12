@@ -1,0 +1,201 @@
+# Built-in action catalog (spec §6), shared by presets that set
+# `include_builtin_actions = true`. Conditions are band-agnostic on purpose:
+# every preset has its own band vocabulary, so a built-in action may only use
+# the cross-preset conditions (confidence, domain, level, response class,
+# disposition, single-point, missing mitigation kinds, fallback, class).
+
+[[actions]]
+id = "remove-failure-path"
+text = "Remove the failure path by design rather than detecting it later"
+tags = ["design"]
+precedence = "eliminate"
+applies_when = { single_point = true }
+
+[[actions]]
+id = "simplify-design"
+text = "Simplify the design so the failure cannot be expressed"
+tags = ["design"]
+precedence = "eliminate"
+applies_when = { mitigation_kinds_missing = ["prevention"] }
+
+[[actions]]
+id = "design-review"
+text = "Hold a design review of this failure mode with a second engineer"
+tags = ["review", "design"]
+precedence = "eliminate"
+applies_when = { single_point = true }
+
+[[actions]]
+id = "input-validation-boundary"
+text = "Validate and reject input at the system boundary"
+tags = ["design", "security"]
+precedence = "prevent"
+applies_when = { domain_in = ["security", "runtime"] }
+
+[[actions]]
+id = "idempotency-retry-backoff"
+text = "Make the operation idempotent and retry with backoff"
+tags = ["design", "ops"]
+precedence = "prevent"
+applies_when = { domain_in = ["runtime", "delivery"] }
+
+[[actions]]
+id = "secure-defaults"
+text = "Make the secure configuration the default"
+tags = ["security", "design"]
+precedence = "prevent"
+applies_when = { confidence_below = "C2" }
+
+[[actions]]
+id = "dependency-pinning-update-policy"
+text = "Pin dependencies and adopt a reviewed update policy"
+tags = ["process", "security"]
+precedence = "prevent"
+applies_when = { domain_in = ["security", "delivery"] }
+
+[[actions]]
+id = "threat-model"
+text = "Threat-model this failure mode with the security team"
+tags = ["security", "design"]
+precedence = "prevent"
+applies_when = { domain_in = ["security"] }
+
+[[actions]]
+id = "privacy-review"
+text = "Review the data flows for privacy impact"
+tags = ["security", "review"]
+precedence = "prevent"
+applies_when = { domain_in = ["security"] }
+
+[[actions]]
+id = "capacity-headroom-review"
+text = "Review capacity headroom and remove the single point of failure"
+tags = ["ops", "process"]
+precedence = "prevent"
+applies_when = { single_point = true }
+
+[[actions]]
+id = "accessibility-review"
+text = "Review the user-facing path for accessibility impact"
+tags = ["review", "design"]
+precedence = "prevent"
+applies_when = { domain_in = ["ux"] }
+
+[[actions]]
+id = "contract-property-test"
+text = "Add a contract or property test that exercises this failure mode"
+tags = ["test"]
+precedence = "detect"
+applies_when = { confidence_below = "C3" }
+
+[[actions]]
+id = "fault-injection-test"
+text = "Add a fault-injection test that forces this failure mode"
+tags = ["test"]
+precedence = "detect"
+applies_when = { confidence_below = "C3" }
+
+[[actions]]
+id = "load-test"
+text = "Add or extend a load test covering this failure mode"
+tags = ["test", "ops"]
+precedence = "detect"
+applies_when = { domain_in = ["runtime"] }
+
+[[actions]]
+id = "code-review-second-engineer"
+text = "Have a second engineer review the change"
+tags = ["review"]
+precedence = "detect"
+applies_when = { confidence_below = "C2" }
+
+[[actions]]
+id = "static-analysis-rule"
+text = "Add a static-analysis rule that catches this class of defect"
+tags = ["test", "process"]
+precedence = "detect"
+applies_when = { mitigation_kinds_missing = ["detection"] }
+
+[[actions]]
+id = "alert-leading-indicator-runbook"
+text = "Alert on the leading indicator and link the runbook"
+tags = ["ops", "docs"]
+precedence = "detect"
+applies_when = { mitigation_kinds_missing = ["detection"] }
+
+[[actions]]
+id = "slo-error-budget"
+text = "Express the guard as an SLO with an error budget"
+tags = ["ops", "process"]
+precedence = "detect"
+applies_when = { domain_in = ["runtime", "delivery"] }
+
+[[actions]]
+id = "chaos-experiment"
+text = "Run a bounded chaos experiment and record the result"
+tags = ["test", "ops"]
+precedence = "detect"
+applies_when = { confidence_below = "C4" }
+
+[[actions]]
+id = "penetration-test"
+text = "Commission a penetration test of the affected surface"
+tags = ["security", "test"]
+precedence = "detect"
+applies_when = { domain_in = ["security"] }
+
+[[actions]]
+id = "feature-flag-staged-rollout"
+text = "Put the change behind a feature flag and roll out in stages"
+tags = ["ops", "design"]
+precedence = "contain"
+applies_when = { domain_in = ["delivery", "runtime"] }
+
+[[actions]]
+id = "canary-automatic-rollback"
+text = "Canary the change with automatic rollback"
+tags = ["ops"]
+precedence = "contain"
+applies_when = { response_class_in = ["restructure", "re_architecture"] }
+
+[[actions]]
+id = "backup-restore-test"
+text = "Rehearse backup and restore for the affected data"
+tags = ["ops", "test"]
+precedence = "contain"
+applies_when = { domain_in = ["runtime", "delivery"] }
+
+[[actions]]
+id = "data-migration-rehearsal"
+text = "Rehearse the data migration on a production-like copy"
+tags = ["process", "ops"]
+precedence = "contain"
+applies_when = { domain_in = ["delivery"] }
+
+[[actions]]
+id = "adr-for-accepted-risk"
+text = "Record an ADR for the accepted risk and its assumptions"
+tags = ["docs", "process"]
+precedence = "procedure"
+applies_when = { disposition_in = ["accepted"] }
+
+[[actions]]
+id = "on-call-handoff-note"
+text = "Leave an on-call handoff note describing the residual risk"
+tags = ["ops", "docs"]
+precedence = "procedure"
+applies_when = { level_in = ["verification"] }
+
+[[actions]]
+id = "documented-runbook"
+text = "Write the manual procedure and its verification steps"
+tags = ["docs", "ops"]
+precedence = "procedure"
+applies_when = { mitigation_kinds_missing = ["detection"] }
+
+[[actions]]
+id = "incident-retrospective"
+text = "Schedule an incident retrospective if the risk is accepted"
+tags = ["process", "docs"]
+precedence = "procedure"
+applies_when = { disposition_in = ["accepted"] }
