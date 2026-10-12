@@ -4,7 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-12
+
+### Added
+
+- `fmeca-policy` crate: declarative TOML risk policies, with action bands per
+  matrix cell, a deterministic confidence axis (C0-C4), low-confidence
+  fallback, dispositions, an action catalog and sign-off.
+- Policy presets: `compat-0.1` (default, equals the 0.1 readiness verdict),
+  `prototype`, `standard`, `business-critical`, `safety-critical`
+  (MIL-STD-882E) and `confidence-view`.
+- Server (`fmeca-mcp`): `actions.suggest` and `policy.list` MCP tools.
+- CLI: `suggest`, `policy validate` and `policy list` with markdown output.
+- Docs: the `fmeca-policy` skill and `docs/policies.md`.
 
 ### Fixed
 
@@ -164,6 +176,7 @@ Initial release.
 - Residual risk and scores derive from a fixed qualitative scoring catalog; the
   catalog is code-resident and not caller-extensible.
 
+[0.2.0]: https://github.com/praxec/fmeca/releases/tag/v0.2.0
 [0.1.0]: https://github.com/praxec/fmeca/releases/tag/v0.1.0
 [0.0.2]: https://github.com/praxec/fmeca/releases/tag/v0.0.2
 [0.0.1]: https://github.com/praxec/fmeca/releases/tag/v0.0.1

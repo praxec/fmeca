@@ -55,6 +55,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99.0
       - run: cargo package --locked --list -p fmeca
       - run: cargo publish --dry-run --locked -p fmeca
+      # Like fmeca-mcp, fmeca-policy depends on the not-yet-published `fmeca`
+      # kernel, so verify its packaging with `package --list` rather than a
+      # `publish --dry-run` (docs/releasing.md, step 7).
+      - run: cargo package --locked --list -p fmeca-policy
       # `fmeca` 0.1.0 is not on crates.io yet, so a `fmeca-mcp` publish
       # dry-run cannot resolve it (cargo 1.99 resolves during packaging even
       # with `--no-verify`). Until then, verify fmeca-mcp packaging with

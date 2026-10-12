@@ -10,13 +10,18 @@ Throughout, `X.Y.Z` is the new version and `vX.Y.Z` its tag.
 
 ## 1. Bump the version
 
-On a branch off `dev`, set the same version in the five files that carry it:
+On a branch off `dev`, set the same version in the files that carry it:
 
 - `Cargo.toml`: `[workspace.package] version`.
-- `crates/fmeca-mcp/Cargo.toml`: the `version` of the `fmeca` dependency
+- `crates/fmeca-mcp/Cargo.toml`: the `version` of the `fmeca` and
+  `fmeca-policy` dependencies
+  (`fmeca = { path = "../fmeca", version = "X.Y.Z" }`,
+  `fmeca-policy = { path = "../fmeca-policy", version = "X.Y.Z" }`).
+- `crates/fmeca-policy/Cargo.toml`: the `version` of the `fmeca` dependency
   (`fmeca = { path = "../fmeca", version = "X.Y.Z" }`).
-- `Cargo.lock`: run `cargo check` (or `cargo update -p fmeca -p fmeca-mcp`) so
-  the lock file records the new version.
+- `Cargo.lock`: run `cargo check` (or
+  `cargo update -p fmeca -p fmeca-policy -p fmeca-mcp`) so the lock file
+  records the new versions.
 - `server.json`: the top-level `version` and the tag of the OCI identifier
   (`ghcr.io/praxec/fmeca:X.Y.Z`). The OCI package has no `version` field: the
   MCP registry rejects one.
@@ -30,8 +35,10 @@ scripts/check-version-sync.sh
 ```
 
 It fails when any `server.json` version or OCI tag, the `npm/package.json`
-version, the `fmeca` dependency version in `crates/fmeca-mcp/Cargo.toml`, or
-the `fmeca`/`fmeca-mcp` entries in `Cargo.lock` differ from `Cargo.toml`. The release workflow repeats the check
+version, an intra-workspace dependency version (`fmeca`/`fmeca-policy` in
+`crates/fmeca-mcp/Cargo.toml`, `fmeca` in `crates/fmeca-policy/Cargo.toml`), or
+the `fmeca`/`fmeca-policy`/`fmeca-mcp` entries in `Cargo.lock` differ from
+`Cargo.toml`. The release workflow repeats the check
 against the tag and refuses to build on a mismatch. Nothing else needs a
 version bump: the README writes `<version>` for a release tag instead of
 pinning one.
@@ -218,19 +225,24 @@ registry and check that its version is `X.Y.Z`.
 ## 7. Publish to crates.io (manual)
 
 The workflow does not publish the crates. From the tagged commit, with a
-crates.io token configured (`cargo login`), publish the kernel first and the
-MCP server second, because `fmeca-mcp` depends on `fmeca`:
+crates.io token configured (`cargo login`), publish in dependency order:
+`fmeca` first, then `fmeca-policy`, then `fmeca-mcp`, because `fmeca-policy`
+and `fmeca-mcp` depend on `fmeca` and `fmeca-mcp` depends on `fmeca-policy`:
 
 ```sh
 git checkout vX.Y.Z
 cargo publish -p fmeca --dry-run --locked
 cargo package -p fmeca --list --locked   # no docs/superpowers, .github or scripts
 cargo publish -p fmeca --locked
+
+# Wait for `fmeca X.Y.Z` to appear on crates.io, then publish fmeca-policy.
+cargo publish -p fmeca-policy --dry-run --locked
+cargo publish -p fmeca-policy --locked
 ```
 
-Wait for `fmeca X.Y.Z` to appear on crates.io, then publish `fmeca-mcp`. Paste
-this block whole: it runs in a subshell that stops at the first failure, so
-nothing is published when the working tree has changes besides the copied
+Wait for `fmeca-policy X.Y.Z` to appear on crates.io, then publish `fmeca-mcp`.
+Paste this block whole: it runs in a subshell that stops at the first failure,
+so nothing is published when the working tree has changes besides the copied
 skills (`--allow-dirty` must cover only those):
 
 ```sh
