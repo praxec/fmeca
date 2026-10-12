@@ -24,6 +24,12 @@ pub trait StateStore: Send + Sync {
 
     /// True if the session has an event log.
     fn exists(&self, session_id: &str) -> Result<bool>;
+
+    /// Session ids present in the store, sorted. Default: `StoreError`
+    /// ("listing unsupported") for stores that cannot enumerate.
+    fn list_sessions(&self) -> Result<Vec<String>> {
+        Err(FmecaError::StoreError("listing unsupported".into()))
+    }
 }
 
 /// Reject session ids that are empty or would escape the state dir / collide
@@ -117,6 +123,30 @@ impl StateStore for FilesystemStore {
     fn exists(&self, session_id: &str) -> Result<bool> {
         Ok(self.path_for(session_id)?.exists())
     }
+
+    /// Every `*.jsonl` file stem in `state_dir` that is a valid session id,
+    /// sorted. Other files (README.md, .gitattributes, …) are ignored.
+    fn list_sessions(&self) -> Result<Vec<String>> {
+        let dir = &self.state_dir;
+        let entries = fs::read_dir(dir)
+            .map_err(|e| FmecaError::StoreError(format!("read_dir {dir:?}: {e}")))?;
+        let mut ids = Vec::new();
+        for entry in entries {
+            let path = entry
+                .map_err(|e| FmecaError::StoreError(format!("read_dir {dir:?}: {e}")))?
+                .path();
+            if !path.is_file() || path.extension().is_none_or(|ext| ext != "jsonl") {
+                continue;
+            }
+            if let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+                && validate_session_id(stem).is_ok()
+            {
+                ids.push(stem.to_string());
+            }
+        }
+        ids.sort();
+        Ok(ids)
+    }
 }
 
 #[cfg(test)]
@@ -127,6 +157,7 @@ mod tests {
         Event::SessionOpened {
             session_id: session_id.to_string(),
             matrix_strategy: crate::matrix::MatrixStrategy::default(),
+            meta: crate::model::SessionMeta::default(),
         }
     }
 

@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+rust-version = "1.89"
+build = "build.rs"
+include = ["src/**", "tests/**", "examples/**", "skills/**", "build.rs", "README.md"]
 description = "Stdio MCP server wrapping the fmeca kernel: a deterministic, offline structured-FMECA engine exposed as a command/query MCP tool surface."
 keywords = ["mcp", "fmeca", "risk", "failure-modes", "analysis"]
 categories = ["development-tools", "command-line-utilities"]
@@ -17,15 +20,47 @@ path = "src/lib.rs"
 name = "fmeca-mcp"
 path = "src/main.rs"
 
+[features]
+default = ["jev"]
+# The Jev client. TLS is rustls with the `ring` crypto provider (no
+# aws-lc-sys, so no cmake on the release runners): rig is built without its
+# `rustls` feature, which would pick reqwest's aws-lc default, and reqwest
+# gets `rustls-no-provider`; `jev::client` installs ring before building a
+# client.
+jev = ["dep:rig-core", "dep:rig-typesafeai", "dep:rig-reqwest", "dep:reqwest", "dep:rustls", "dep:async-trait"]
+# Exposes `jev::fake::FakeJudge` to integration tests and dependants.
+test-fakes = ["jev"]
+
 [dependencies]
-fmeca = { path = "../fmeca", version = "0.0.2" }
+fmeca = { path = "../fmeca", version = "0.1.0" }
 anyhow = "1"
-rmcp = { version = "1.7", default-features = false, features = ["server", "macros", "transport-io"] }
+rmcp = { version = "3.5", default-features = false, features = ["server", "macros", "transport-io"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rig-core = { version = "0.44", default-features = false, features = ["reqwest"], optional = true }
+rig-typesafeai = { version = "0.44", default-features = false, features = ["reqwest"], optional = true }
+rig-reqwest = { version = "0.44", default-features = false, optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "charset", "http2", "system-proxy"], optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"], optional = true }
+async-trait = { version = "0.1", optional = true }
+# sha256: `vet` question hashes and skills-install manifest digests / lock names.
+sha2 = "0.10"
+# The RFC 3339 `at` stamp on resolution changes (the kernel never reads a clock).
+time = { version = "0.3", features = ["formatting"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[[example]]
+name = "jev_openrouter_smoke"
+required-features = ["jev"]
 
 [dev-dependencies]
 tempfile = "3"
+wiremock = "0.6"
+async-trait = "0.1"
+toml = "1"
+time = { version = "0.3", features = ["parsing"] }

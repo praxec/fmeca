@@ -4,11 +4,193 @@ on:
     branches: [main, dev]
   pull_request:
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          components: rustfmt, clippy
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets
-      - run: cargo test --workspace
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      # The vet tests and the fake judge compile only with test-fakes.
+      - run: cargo clippy -p fmeca-mcp --all-targets --features test-fakes -- -D warnings
+  test-matrix:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.99.0
+      # test-fakes compiles the vet tests (FakeJudge; no network).
+      - run: cargo test --workspace --features fmeca-mcp/test-fakes
+  test:
+    needs: [test-matrix]
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - run: test "${{ needs.test-matrix.result }}" = "success"
+  cargo-deny:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+  docs:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - run: cargo doc --no-deps --locked --workspace
+        env: { RUSTDOCFLAGS: "-D warnings" }
+  package:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - run: cargo package --locked --list -p fmeca
+      - run: cargo publish --dry-run --locked -p fmeca
+      # `fmeca` 0.1.0 is not on crates.io yet, so a `fmeca-mcp` publish
+      # dry-run cannot resolve it (cargo 1.99 resolves during packaging even
+      # with `--no-verify`). Until then, verify fmeca-mcp packaging with
+      # `package --list`; once `fmeca` 0.1.0 is published, restore
+      # `cargo publish --dry-run --locked -p fmeca-mcp --allow-dirty` here
+      # (docs/releasing.md, step 7).
+      # build.rs embeds $CARGO_MANIFEST_DIR/skills when present, and the packaged
+      # crate cannot reach ../../skills, so copy the workspace skills in first
+      # (the copy is gitignored).
+      - name: copy skills into the fmeca-mcp package
+        run: |
+          if [ -d skills ]; then cp -R skills crates/fmeca-mcp/skills; fi
+      # `--allow-dirty` must only cover the copied skills: fail on any other
+      # uncommitted or untracked change.
+      - name: only the copied skills are dirty
+        shell: bash
+        run: |
+          set -euo pipefail
+          dirty="$(git status --porcelain --untracked-files=all | grep -v ' crates/fmeca-mcp/skills/' || true)"
+          if [ -n "$dirty" ]; then
+            printf '%s\n' "$dirty"
+            echo "::error::the working tree has changes besides crates/fmeca-mcp/skills/"
+            exit 1
+          fi
+      # skills/ is copied in as a generated packaging input (gitignored); see build.rs
+      - run: cargo package --locked --list -p fmeca-mcp --allow-dirty
+  # Builds the Dockerfile the release image job uses, so a broken image build
+  # fails a PR rather than a release. amd64 only; nothing is pushed.
+  docker:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build .
+  npm:
+    name: npm launcher (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: launcher tests
+        run: node --test npm/test/*.test.mjs
+      - name: npm pack (dry run)
+        working-directory: npm
+        run: npm pack --dry-run --ignore-scripts
+      # Runs the release publish script against a freshly packed tarball.
+      - name: npm publish script (dry run)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd npm
+          npm pack --ignore-scripts
+          bash ../scripts/npm-publish.sh ./matthew-cochran-fmeca-*.tgz "$(node -p "require('./package.json').version")" --dry-run
+  kernel-purity:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - name: fmeca kernel has no network deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree="$(cargo tree --locked -p fmeca -e normal)"
+          if grep -E '\b(rig|reqwest)' <<<"$tree"; then
+            echo "::error::fmeca kernel depends on rig/reqwest"
+            exit 1
+          fi
+      - name: server builds without jev
+        run: cargo build -p fmeca-mcp --no-default-features --locked
+  # Builds the release binary for each frozen release.yml target, so a
+  # dependency that breaks a target (C toolchain, cross build) fails a PR
+  # rather than a release. Keep this matrix in step with release.yml's
+  # `binaries` job.
+  release-targets:
+    name: release build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu,  os: ubuntu-22.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm }
+          - { target: x86_64-apple-darwin,        os: macos-15-intel }
+          - { target: aarch64-apple-darwin,       os: macos-15 }
+          - { target: x86_64-pc-windows-msvc,     os: windows-latest }
+          - { target: aarch64-pc-windows-msvc,    os: windows-11-arm }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build --locked --release -p fmeca-mcp --bin fmeca-mcp --target ${{ matrix.target }}
+  skills-smoke:
+    name: skills install smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - run: cargo build -p fmeca-mcp
+      # With an empty skills/ this asserts exit 0 and idempotent output only;
+      # once skills/ holds skills it asserts their files too.
+      - name: skills install, rerun, uninstall
+        run: scripts/skills-smoke.sh target/debug/fmeca-mcp "$RUNNER_TEMP"
+  version-sync:
+    name: version sync
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: every version field agrees with Cargo.toml
+        run: bash scripts/check-version-sync.sh
+  junior-contract:
+    name: junior contract
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - run: cargo build -p fmeca-mcp
+      - name: release wiring and MCP tool surface
+        run: bash scripts/junior-contract-check.sh target/debug/fmeca-mcp
+      - name: negative self-test (renamed target must fail)
+        run: bash scripts/junior-contract-check.test.sh

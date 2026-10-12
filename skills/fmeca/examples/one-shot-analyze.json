@@ -1,0 +1,63 @@
+{
+  "matrix_strategy": "qualitative3x3",
+  "failure_modes": [
+    {
+      "id": "fm-retry-double-charge",
+      "component": { "id": "checkout.payment_client" },
+      "description": "A timed-out charge is retried and captured twice",
+      "cause": "the client retries charges without an idempotency key",
+      "effect": "the customer is charged twice",
+      "domain": "runtime",
+      "scope": "localized",
+      "severity_observations": ["data_loss"],
+      "probability_observations": ["load_or_concurrency_dependent"],
+      "mitigations": [
+        {
+          "id": "m-idempotency-key",
+          "kind": "prevention",
+          "description": "Send a per-order idempotency key with every charge so the provider drops duplicates",
+          "residual_severity_observations": ["recoverable_error"],
+          "residual_probability_observations": ["rare_edge_case"]
+        }
+      ]
+    },
+    {
+      "id": "fm-webhook-lost",
+      "component": { "id": "checkout.webhook_handler" },
+      "description": "A payment-succeeded webhook is dropped during a deploy",
+      "cause": "the handler acknowledges before persisting",
+      "effect": "a paid order stays unpaid and is not shipped",
+      "domain": "architecture",
+      "scope": "cross_cutting",
+      "severity_observations": ["user_facing_degradation"],
+      "probability_observations": ["occasional"],
+      "mitigations": [
+        {
+          "id": "m-persist-then-ack",
+          "kind": "prevention",
+          "description": "Persist the event before acknowledging it",
+          "residual_severity_observations": ["user_facing_degradation"],
+          "residual_probability_observations": ["rare_edge_case"]
+        },
+        {
+          "id": "m-reconcile-job",
+          "kind": "detection",
+          "description": "An hourly job reconciles provider payments against orders and alerts on mismatches",
+          "residual_severity_observations": ["recoverable_error"],
+          "residual_probability_observations": ["rare_edge_case"]
+        }
+      ]
+    },
+    {
+      "id": "fm-receipt-typo",
+      "component": { "id": "checkout.receipt_email" },
+      "description": "The receipt email shows the wrong currency symbol",
+      "cause": "the template hard-codes the symbol",
+      "effect": "the receipt looks wrong but the amount is right",
+      "domain": "ux",
+      "severity_observations": ["cosmetic"],
+      "probability_observations": ["happens_in_normal_use"],
+      "mitigations": []
+    }
+  ]
+}

@@ -24,20 +24,21 @@
 //! - [`scoring`]     — the fixed code-resident evidence→score catalog + the
 //!   observation→Level map (the model never picks a score).
 //! - [`response`]    — the deterministic `response_class` magnitude derivation.
-//! - [`criticality`] — the fixed qualitative S×P matrix (the 3×3 strategy's cells).
-//! - [`matrix`]      — the swappable [`MatrixStrategy`](matrix::MatrixStrategy)
+//! - [`mod@criticality`] — the fixed qualitative S×P matrix (the 3×3 strategy's cells).
+//! - [`matrix`]      — the swappable [`MatrixStrategy`]
 //!   seam: a closed set of fixed matrices selected per session (3×3
 //!   default + NASA GSFC-HDBK-8004 5×5), each with locked cells.
 //! - [`event`]       — the append-only event log line type.
-//! - [`store`]       — the [`StateStore`](store::StateStore) trait + filesystem
+//! - [`store`]       — the [`StateStore`] trait + filesystem
 //!   (JSONL) impl.
-//! - [`projection`]  — the [`FmecaState`](projection::FmecaState) fold + computed
+//! - [`projection`]  — the [`FmecaState`] fold + computed
 //!   criticality/residual/standing.
-//! - [`detect`]      — issue detectors (one per `IssueType`).
+//! - `detect`        — issue detectors (one per `IssueType`).
 //! - [`signal`]      — the three first-class signals + `risk.next`.
 //! - [`readiness`]   — the readiness gate.
 //! - [`export`]      — `report.export`.
-//! - [`engine`]      — the [`Engine`](engine::Engine) tying it together, with the
+//! - [`validate`]    — `validate_log`, structural checks over a session log.
+//! - [`engine`]      — the [`Engine`] tying it together, with the
 //!   per-session write lock.
 
 pub mod analyze;
@@ -55,6 +56,7 @@ pub mod response;
 pub mod scoring;
 pub mod signal;
 pub mod store;
+pub mod validate;
 
 pub use analyze::{AnalyzeFailureMode, AnalyzeInput, AnalyzeMitigation, AnalyzeReport, analyze};
 pub use criticality::criticality;
@@ -64,12 +66,15 @@ pub use event::Event;
 pub use export::{ExportedMitigation, FmecaReport, FmecaRow};
 pub use matrix::{MatrixStrategy, StrategyLevel};
 pub use model::{
-    Criticality, Domain, EntityRef, EvidenceRef, FailureMode, FailureModeStanding, Issue,
-    IssueType, Level, Mitigation, MitigationKind, Rescore,
+    AnalysisLevel, Criticality, Disposition, DispositionChange, Domain, EntityRef, EvidenceBasis,
+    EvidenceKind, EvidenceRef, FailureMode, FailureModeStanding, Issue, IssueType, Level,
+    Mitigation, MitigationKind, MitigationStatus, MitigationStatusChange, ParentRef, Rescore,
+    ResolutionEvidence, SessionMeta,
 };
-pub use projection::{FailureModeView, FmecaState, Registry};
-pub use readiness::{CriticalityBuckets, ReadinessReport};
+pub use projection::{FailureModeView, FmecaState, MitigationView, Registry};
+pub use readiness::{CriticalityBuckets, ReadinessReport, ResolutionCounts, VerifiedGate};
 pub use response::{ResponseClass, Scope, response_class};
 pub use scoring::{Axis, ScoreCriterion, catalog, catalog_for, derive_level, derive_ordinal};
 pub use signal::{Signal, SignalKind, next_risk};
 pub use store::{FilesystemStore, StateStore};
+pub use validate::{LogProblem, LogProblemKind, validate_log};
