@@ -1,0 +1,351 @@
+{
+  "policy": {
+    "name": "business-critical",
+    "hash": "b7935023618e4565aad8f8ab8fd04f564d093ad0ffb179402164c2ebd2cf6a53",
+    "class": "business-critical",
+    "matrix_derived_from": "nasa8004_5x5",
+    "source": "preset"
+  },
+  "as_of": "2026-10-12",
+  "failure_modes": [
+    {
+      "id": "fm-acc",
+      "inherent_band": "review",
+      "residual_band": "review",
+      "effective_band": "review",
+      "confidence": "C0",
+      "fallback": null,
+      "status": {
+        "state": "accepted",
+        "approver": "lead",
+        "at": "2026-01-01T00:00:00Z",
+        "review_due": true,
+        "acceptance_role": "eng_manager",
+        "concurrence": [
+          "tech_lead",
+          "product_owner"
+        ]
+      },
+      "rationale_needed": false,
+      "actions": [
+        {
+          "id": "design-review",
+          "text": "Hold a design review of this failure mode with a second engineer",
+          "tags": [
+            "review",
+            "design"
+          ],
+          "precedence": "eliminate",
+          "required": true,
+          "why": [
+            "band review ≥ review",
+            "required: band review ≥ review"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "simplify-design",
+          "text": "Simplify the design so this failure cannot be expressed (fewer states, stricter types)",
+          "tags": [
+            "design"
+          ],
+          "precedence": "eliminate",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 2",
+            "no implemented prevention mitigation"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "capacity-headroom-review",
+          "text": "Review capacity headroom and saturation limits on this path",
+          "tags": [
+            "ops",
+            "review"
+          ],
+          "precedence": "prevent",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 1",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "idempotency-retry-backoff",
+          "text": "Make the operation idempotent and retry with backoff",
+          "tags": [
+            "design",
+            "ops"
+          ],
+          "precedence": "prevent",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 1",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "input-validation-boundary",
+          "text": "Validate and reject input at the system boundary",
+          "tags": [
+            "design",
+            "security"
+          ],
+          "precedence": "prevent",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 1",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "prevention-before-detection",
+          "text": "Prevent the failure by design before adding detection on a review-band risk",
+          "tags": [
+            "design",
+            "process"
+          ],
+          "precedence": "prevent",
+          "required": true,
+          "why": [
+            "band review ≥ review",
+            "required: band review ≥ review",
+            "required: no implemented prevention mitigation"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "alert-leading-indicator",
+          "text": "Alert on the leading indicator of this failure before users notice it",
+          "tags": [
+            "ops"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 1",
+            "domain runtime",
+            "no implemented detection mitigation"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "code-review-second-engineer",
+          "text": "Have a second engineer review the change",
+          "tags": [
+            "review"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 1",
+            "confidence C0 < C2"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "fault-injection-test",
+          "text": "Add a fault-injection test that forces this failure mode and checks the response",
+          "tags": [
+            "test"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 1",
+            "domain runtime",
+            "confidence C0 < C3"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "load-test",
+          "text": "Add or extend a load test covering this failure mode",
+          "tags": [
+            "test",
+            "ops"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 2",
+            "domain runtime",
+            "confidence C0 < C3"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "slo-error-budget",
+          "text": "Express the guard as an SLO with an error budget",
+          "tags": [
+            "ops",
+            "process"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 2",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "backup-restore-test",
+          "text": "Rehearse backup and restore for the affected data",
+          "tags": [
+            "ops",
+            "test"
+          ],
+          "precedence": "contain",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 2",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "feature-flag-staged-rollout",
+          "text": "Put the change behind a feature flag and roll out in stages",
+          "tags": [
+            "ops",
+            "design"
+          ],
+          "precedence": "contain",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 1",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "adr-for-accepted-risk",
+          "text": "Record an ADR for the accepted risk and its assumptions",
+          "tags": [
+            "docs",
+            "process"
+          ],
+          "precedence": "procedure",
+          "required": false,
+          "why": [
+            "disposition accepted"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "documented-runbook",
+          "text": "Write the runbook for responding to this failure, with its verification steps",
+          "tags": [
+            "docs",
+            "ops"
+          ],
+          "precedence": "procedure",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 2",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "on-call-handoff-note",
+          "text": "Leave an on-call handoff note describing the accepted residual risk and how to recognise it",
+          "tags": [
+            "ops",
+            "docs"
+          ],
+          "precedence": "procedure",
+          "required": false,
+          "why": [
+            "band review rank 2 ≥ 1",
+            "domain runtime",
+            "disposition accepted"
+          ],
+          "covered_by": []
+        }
+      ]
+    },
+    {
+      "id": "fm-claimed",
+      "inherent_band": "review",
+      "residual_band": "none",
+      "effective_band": "none",
+      "confidence": "C2",
+      "fallback": null,
+      "status": {
+        "state": "open",
+        "suggested": "close"
+      },
+      "rationale_needed": false,
+      "actions": []
+    },
+    {
+      "id": "fm-unscored",
+      "inherent_band": null,
+      "residual_band": null,
+      "effective_band": null,
+      "confidence": "C0",
+      "fallback": null,
+      "status": {
+        "state": "unscored",
+        "suggested": "research"
+      },
+      "rationale_needed": false,
+      "actions": []
+    }
+  ],
+  "excluded": [
+    {
+      "id": "fm-exc",
+      "rationale": "not credible"
+    }
+  ],
+  "rollups": {
+    "by_band": {
+      "none": 1,
+      "review": 1,
+      "unscored": 1
+    },
+    "by_confidence": {
+      "C0": 2,
+      "C2": 1
+    },
+    "by_status": {
+      "accepted": 1,
+      "open": 1,
+      "unscored": 1
+    },
+    "required_uncovered": [
+      [
+        "fm-acc",
+        "design-review"
+      ],
+      [
+        "fm-acc",
+        "prevention-before-detection"
+      ]
+    ],
+    "accepted_by_role": {
+      "eng_manager": 1
+    },
+    "review_overdue": [
+      "fm-acc"
+    ],
+    "fallbacks": []
+  },
+  "signoff": {
+    "pass": false,
+    "reasons": [
+      "fm-acc: accepted risk in band `review` is overdue for review",
+      "fm-acc: required action `design-review` is not covered",
+      "fm-acc: required action `prevention-before-detection` is not covered",
+      "fm-unscored: unscored",
+      "kernel: CLARIFY: failure mode 'fm-unscored' is missing cause/effect/score"
+    ]
+  }
+}

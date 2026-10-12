@@ -74,6 +74,9 @@ Evidence that verifies them (see [fmeca-resolve](../fmeca-resolve/SKILL.md)):
 Also go back to the parent analyses and move their mitigations to `verified` where this
 evidence proves them.
 
+To propose concrete work, call `actions.suggest` with `group_by: "tag"` (see
+[fmeca-policy](../fmeca-policy/SKILL.md)); it only suggests.
+
 ## 6. Hand-off to the next level
 
 - Hand off to [fmeca-signoff](../fmeca-signoff/SKILL.md). At this level sign-off needs

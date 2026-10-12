@@ -1,0 +1,24 @@
+[package]
+name = "fmeca-policy"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.89"
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme = "README.md"
+description = "Declarative risk policies for fmeca: the policy model, TOML parsing, validation, hashing, project-policy loading and a deterministic evaluator of suggested actions and sign-off. Pure: no network, no clock."
+keywords = ["fmeca", "risk", "policy", "failure-modes"]
+categories = ["development-tools"]
+
+[lib]
+name = "fmeca_policy"
+path = "src/lib.rs"
+
+[dependencies]
+fmeca = { path = "../fmeca", version = "0.2.0" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = "0.10"
+thiserror = "2"
+toml = "1"

@@ -1,0 +1,181 @@
+{
+  "policy": {
+    "name": "prototype",
+    "hash": "c484324044631012c49e90a86e01c8c26bc29f770e2320bbad4e60008ef76554",
+    "class": "prototype",
+    "matrix_derived_from": "qualitative3x3",
+    "source": "preset"
+  },
+  "as_of": "2026-10-12",
+  "failure_modes": [
+    {
+      "id": "fm-fixed",
+      "inherent_band": "remediate",
+      "residual_band": "none",
+      "effective_band": "none",
+      "confidence": "C3",
+      "fallback": null,
+      "status": {
+        "state": "open",
+        "suggested": "close"
+      },
+      "rationale_needed": false,
+      "actions": []
+    },
+    {
+      "id": "fm-mid",
+      "inherent_band": "report",
+      "residual_band": "report",
+      "effective_band": "report",
+      "confidence": "C0",
+      "fallback": null,
+      "status": {
+        "state": "open",
+        "suggested": "mitigate"
+      },
+      "rationale_needed": true,
+      "actions": [
+        {
+          "id": "capacity-headroom-review",
+          "text": "Review capacity headroom and saturation limits on this path",
+          "tags": [
+            "ops",
+            "review"
+          ],
+          "precedence": "prevent",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "idempotency-retry-backoff",
+          "text": "Make the operation idempotent and retry with backoff",
+          "tags": [
+            "design",
+            "ops"
+          ],
+          "precedence": "prevent",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "input-validation-boundary",
+          "text": "Validate and reject input at the system boundary",
+          "tags": [
+            "design",
+            "security"
+          ],
+          "precedence": "prevent",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "alert-leading-indicator",
+          "text": "Alert on the leading indicator of this failure before users notice it",
+          "tags": [
+            "ops"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "domain runtime",
+            "no implemented detection mitigation"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "code-review-second-engineer",
+          "text": "Have a second engineer review the change",
+          "tags": [
+            "review"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "confidence C0 < C2"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "fault-injection-test",
+          "text": "Add a fault-injection test that forces this failure mode and checks the response",
+          "tags": [
+            "test"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "domain runtime",
+            "confidence C0 < C3"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "canary-automatic-rollback",
+          "text": "Canary the change with automatic rollback",
+          "tags": [
+            "ops"
+          ],
+          "precedence": "contain",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "response_class restructure"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "feature-flag-staged-rollout",
+          "text": "Put the change behind a feature flag and roll out in stages",
+          "tags": [
+            "ops",
+            "design"
+          ],
+          "precedence": "contain",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "domain runtime"
+          ],
+          "covered_by": []
+        }
+      ]
+    }
+  ],
+  "excluded": [],
+  "rollups": {
+    "by_band": {
+      "none": 1,
+      "report": 1
+    },
+    "by_confidence": {
+      "C0": 1,
+      "C3": 1
+    },
+    "by_status": {
+      "open": 2
+    },
+    "required_uncovered": [],
+    "accepted_by_role": {},
+    "review_overdue": [],
+    "fallbacks": []
+  },
+  "signoff": {
+    "pass": true,
+    "reasons": []
+  }
+}

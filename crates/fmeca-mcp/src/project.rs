@@ -50,6 +50,13 @@ Run `fmeca-mcp check` after merges and in CI. A union merge can keep both
 branches' events and duplicate an id; `check` names the duplicate.
 
 Resume an analysis with `session.open` on the same `<session_id>`.
+
+## Risk policies
+
+Your own risk policies live in `policies/<name>.toml`, next to the logs. Check one
+with `fmeca-mcp policy validate <file>` and commit it. They resolve after the
+built-in presets (`fmeca-mcp policy list` shows both). A policy only reads an
+analysis; it is never written to a log.
 ";
 
 /// What `init` did to one file.

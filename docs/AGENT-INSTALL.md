@@ -78,9 +78,10 @@ server directly over stdio, so they work the same for every client. Swap the
 first word for the command you chose (`fmeca-mcp`, `npx -y @matthew-cochran/fmeca`
 or the `docker run` line).
 
-**1. `tools/list` shows ten tools.** The eight core tools are `session.open`,
+**1. `tools/list` shows twelve tools.** The eight core tools are `session.open`,
 `append`, `state.get`, `risk.next`, `readiness.assess`, `report.export`,
-`scoring.catalog` and `analyze`, plus `session.list` and `vet`.
+`scoring.catalog` and `analyze`, plus `session.list`, `vet` and the read-only
+policy tools `actions.suggest` and `policy.list`.
 
 ```sh
 printf '%s\n' \
@@ -110,6 +111,20 @@ EXAMPLE=~/.claude/skills/fmeca/examples/one-shot-analyze.json
 You should see `ready: false` and a `risk_ranking` that starts with
 `fm-retry-double-charge`. In the client itself, ask: "Use the fmeca `analyze`
 tool on the example in the fmeca skill" and it should return the same report.
+
+**3. `policy.list` lists the policy presets.** It takes no arguments and
+writes nothing. Reuse the handshake from check 1 and add one call:
+
+```sh
+{
+  printf '%s\n' \
+    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"check","version":"0"}}}' \
+    '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+    '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"policy.list","arguments":{}}}'
+} | fmeca-mcp 2>/dev/null | tail -n 1 | jq -r '.result.structuredContent.presets[].name'
+```
+
+You should see six names, from `compat-0.1` to `confidence-view`.
 
 ## Claude Code
 
@@ -422,6 +437,18 @@ analyses are reviewed, merged and versioned with the code.
    A union merge can keep both branches' events and so duplicate an id, or leave
    a log that no longer replays; `check` names the log and the problem.
 
+### Risk policies
+
+A risk policy reads an analysis under the project's own risk bands and sign-off
+rule and suggests actions. It never changes the log. Run `fmeca-mcp policy list`
+for the presets (`compat-0.1`, `prototype`, `standard`, `business-critical`,
+`safety-critical`, `confidence-view`). Put your own in
+`.fmeca/policies/<name>.toml`, check it with `fmeca-mcp policy validate <file>`,
+and commit it. Agents use the `actions.suggest` and `policy.list` tools; CI can
+run `fmeca-mcp suggest <session-id> --policy <name>`, which exits 1 when the
+policy's sign-off fails. The `fmeca-policy` skill teaches this; the model and
+presets are in [policies.md](policies.md).
+
 ### Docker and the repo
 
 A container only sees `.fmeca/` if the project is mounted. Use this as the
@@ -452,7 +479,8 @@ writes to `.fmeca/` are owned by you rather than by the image's own user.
 Around the levels: [fmeca](../skills/fmeca/SKILL.md) is the method reference,
 [fmeca-resolve](../skills/fmeca-resolve/SKILL.md) records progress,
 [fmeca-vet](../skills/fmeca-vet/SKILL.md) asks for the optional Jev second
-opinion, and [fmeca-signoff](../skills/fmeca-signoff/SKILL.md) produces the
+opinion, [fmeca-policy](../skills/fmeca-policy/SKILL.md) reads an analysis under
+a risk policy, and [fmeca-signoff](../skills/fmeca-signoff/SKILL.md) produces the
 sign-off summary. The level detail is in
 [levels.md](../skills/fmeca/levels.md).
 

@@ -1,0 +1,92 @@
+{
+  "policy": {
+    "name": "compat-0.1",
+    "hash": "b0b551c9a63d92a7d7f75bbfb7c4974f204de7a4e61ab1ebfeab31f55c8a5a18",
+    "class": "compat-0.1",
+    "matrix_derived_from": "nasa8004_5x5",
+    "source": "preset"
+  },
+  "as_of": "2026-10-12",
+  "failure_modes": [
+    {
+      "id": "fm-acc",
+      "inherent_band": "mitigate",
+      "residual_band": "mitigate",
+      "effective_band": "mitigate",
+      "confidence": "C0",
+      "fallback": null,
+      "status": {
+        "state": "accepted",
+        "approver": "lead",
+        "at": "2026-01-01T00:00:00Z",
+        "review_due": false,
+        "acceptance_role": null,
+        "concurrence": []
+      },
+      "rationale_needed": false,
+      "actions": []
+    },
+    {
+      "id": "fm-claimed",
+      "inherent_band": "mitigate",
+      "residual_band": "none",
+      "effective_band": "none",
+      "confidence": "C2",
+      "fallback": null,
+      "status": {
+        "state": "open",
+        "suggested": "close"
+      },
+      "rationale_needed": false,
+      "actions": []
+    },
+    {
+      "id": "fm-unscored",
+      "inherent_band": null,
+      "residual_band": null,
+      "effective_band": null,
+      "confidence": "C0",
+      "fallback": null,
+      "status": {
+        "state": "unscored",
+        "suggested": "research"
+      },
+      "rationale_needed": false,
+      "actions": []
+    }
+  ],
+  "excluded": [
+    {
+      "id": "fm-exc",
+      "rationale": "not credible"
+    }
+  ],
+  "rollups": {
+    "by_band": {
+      "mitigate": 1,
+      "none": 1,
+      "unscored": 1
+    },
+    "by_confidence": {
+      "C0": 2,
+      "C2": 1
+    },
+    "by_status": {
+      "accepted": 1,
+      "open": 1,
+      "unscored": 1
+    },
+    "required_uncovered": [],
+    "accepted_by_role": {
+      "unassigned": 1
+    },
+    "review_overdue": [],
+    "fallbacks": []
+  },
+  "signoff": {
+    "pass": false,
+    "reasons": [
+      "kernel: CLARIFY: failure mode 'fm-unscored' is missing cause/effect/score"
+    ]
+  }
+}

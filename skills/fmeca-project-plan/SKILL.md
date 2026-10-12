@@ -86,6 +86,9 @@ The evidence that verifies it is a `url` to the merged plan revision (the commit
 request that changed the plan file), basis `design`. See
 [fmeca-resolve](../fmeca-resolve/SKILL.md).
 
+To propose concrete work, call `actions.suggest` with `group_by: "tag"` (see
+[fmeca-policy](../fmeca-policy/SKILL.md)); it only suggests.
+
 ## 6. Hand-off to the next level
 
 - Hand off to [fmeca-implementation](../fmeca-implementation/SKILL.md) for each deliverable

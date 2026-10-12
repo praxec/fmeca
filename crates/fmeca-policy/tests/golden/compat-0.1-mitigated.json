@@ -1,0 +1,48 @@
+{
+  "policy": {
+    "name": "compat-0.1",
+    "hash": "b0b551c9a63d92a7d7f75bbfb7c4974f204de7a4e61ab1ebfeab31f55c8a5a18",
+    "class": "compat-0.1",
+    "matrix_derived_from": "qualitative3x3",
+    "source": "preset"
+  },
+  "as_of": "2026-10-12",
+  "failure_modes": [
+    {
+      "id": "fm-m",
+      "inherent_band": "mitigate",
+      "residual_band": "mitigate",
+      "effective_band": "mitigate",
+      "confidence": "C3",
+      "fallback": null,
+      "status": {
+        "state": "open",
+        "suggested": "mitigate"
+      },
+      "rationale_needed": false,
+      "actions": []
+    }
+  ],
+  "excluded": [],
+  "rollups": {
+    "by_band": {
+      "mitigate": 1
+    },
+    "by_confidence": {
+      "C3": 1
+    },
+    "by_status": {
+      "open": 1
+    },
+    "required_uncovered": [],
+    "accepted_by_role": {},
+    "review_overdue": [],
+    "fallbacks": []
+  },
+  "signoff": {
+    "pass": false,
+    "reasons": [
+      "fm-m: effective band `mitigate` ranks above max_residual_band `none`"
+    ]
+  }
+}

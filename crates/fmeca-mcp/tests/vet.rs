@@ -560,6 +560,8 @@ fn tools_list_adds_vet_and_keeps_the_eight() {
             "scoring.catalog",
             "analyze",
             "session.list",
+            "actions.suggest",
+            "policy.list",
             "vet"
         ]
     );

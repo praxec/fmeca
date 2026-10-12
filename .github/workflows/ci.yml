@@ -55,6 +55,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99.0
       - run: cargo package --locked --list -p fmeca
       - run: cargo publish --dry-run --locked -p fmeca
+      # Like fmeca-mcp, fmeca-policy depends on the not-yet-published `fmeca`
+      # kernel, so verify its packaging with `package --list` rather than a
+      # `publish --dry-run` (docs/releasing.md, step 7).
+      - run: cargo package --locked --list -p fmeca-policy
       # `fmeca` 0.1.0 is not on crates.io yet, so a `fmeca-mcp` publish
       # dry-run cannot resolve it (cargo 1.99 resolves during packaging even
       # with `--no-verify`). Until then, verify fmeca-mcp packaging with
@@ -131,6 +135,24 @@ jobs:
             echo "::error::fmeca kernel depends on rig/reqwest"
             exit 1
           fi
+      - name: fmeca kernel does not depend on fmeca-policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree="$(cargo tree --locked -p fmeca -e normal)"
+          if grep -E '\bfmeca-policy\b' <<<"$tree"; then
+            echo "::error::fmeca kernel depends on fmeca-policy"
+            exit 1
+          fi
+      - name: fmeca-policy has no network or clock deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree="$(cargo tree --locked -p fmeca-policy -e normal)"
+          if grep -E '\b(reqwest|rig|tokio|chrono|time) v' <<<"$tree"; then
+            echo "::error::fmeca-policy depends on a network or clock crate"
+            exit 1
+          fi
       - name: server builds without jev
         run: cargo build -p fmeca-mcp --no-default-features --locked
   # Builds the release binary for each frozen release.yml target, so a
@@ -194,3 +216,19 @@ jobs:
         run: bash scripts/junior-contract-check.sh target/debug/fmeca-mcp
       - name: negative self-test (renamed target must fail)
         run: bash scripts/junior-contract-check.test.sh
+  server-json:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      # Pinned release + checksum, copied from release.yml.
+      MCP_PUBLISHER_VERSION: v1.8.1
+      MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+    steps:
+      - uses: actions/checkout@v7
+      - name: validate server.json against the MCP registry schema
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz" -o mcp-publisher.tgz
+          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tgz" | sha256sum -c -
+          tar xzf mcp-publisher.tgz mcp-publisher
+          ./mcp-publisher validate

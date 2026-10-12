@@ -14,6 +14,7 @@ pub mod jev;
 pub mod project;
 pub mod server;
 pub mod skills;
+pub mod suggest;
 #[cfg(feature = "jev")]
 pub mod vet;
 
@@ -23,7 +24,7 @@ pub use config::{
 #[cfg(feature = "jev")]
 pub use server::TOOL_VET;
 pub use server::{
-    FmecaServer, TOOL_ANALYZE, TOOL_APPEND, TOOL_NAMES, TOOL_READINESS_ASSESS, TOOL_REPORT_EXPORT,
-    TOOL_RISK_NEXT, TOOL_SCORING_CATALOG, TOOL_SESSION_LIST, TOOL_SESSION_OPEN, TOOL_STATE_GET,
-    tool_definitions,
+    FmecaServer, TOOL_ACTIONS_SUGGEST, TOOL_ANALYZE, TOOL_APPEND, TOOL_NAMES, TOOL_POLICY_LIST,
+    TOOL_READINESS_ASSESS, TOOL_REPORT_EXPORT, TOOL_RISK_NEXT, TOOL_SCORING_CATALOG,
+    TOOL_SESSION_LIST, TOOL_SESSION_OPEN, TOOL_STATE_GET, tool_definitions,
 };

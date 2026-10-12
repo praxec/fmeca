@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Fail when any version field in server.json, the npm launcher's
-# npm/package.json version, the fmeca-mcp manifest's `fmeca` dependency, or the
-# Cargo.lock entries for `fmeca`/`fmeca-mcp` differs from Cargo.toml's
+# npm/package.json version, an intra-workspace dependency version
+# (`fmeca`/`fmeca-policy` in the fmeca-mcp manifest, `fmeca` in the
+# fmeca-policy manifest), or the Cargo.lock entries for
+# `fmeca`/`fmeca-policy`/`fmeca-mcp` differs from Cargo.toml's
 # [workspace.package] version.
 # Usage: scripts/check-version-sync.sh [cargo_toml] [server_json] [npm_package_json]
 set -euo pipefail
@@ -11,6 +13,7 @@ cargo_toml="${1:-$root/Cargo.toml}"
 server_json="${2:-$root/server.json}"
 npm_package_json="${3:-$root/npm/package.json}"
 mcp_cargo_toml="$root/crates/fmeca-mcp/Cargo.toml"
+policy_cargo_toml="$root/crates/fmeca-policy/Cargo.toml"
 cargo_lock="$root/Cargo.lock"
 
 # First `version = "..."` inside the [workspace.package] table.
@@ -48,17 +51,25 @@ if [ "$npm_version" != "$cargo_version" ]; then
   status=1
 fi
 
-# The internal dependency on the kernel crate is pinned to the same version.
-dep_version="$(sed -n 's/^fmeca[[:space:]]*=.*version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$mcp_cargo_toml" | head -n 1)"
-[ -n "$dep_version" ] || { echo "could not read fmeca dependency version from $mcp_cargo_toml" >&2; exit 2; }
-if [ "$dep_version" != "$cargo_version" ]; then
-  echo "crates/fmeca-mcp/Cargo.toml fmeca dependency version $dep_version != Cargo.toml version $cargo_version" >&2
-  status=1
-fi
+# Every intra-workspace dependency is pinned to the same version.
+check_dep_version() {
+  local manifest="$1" dep="$2" label="$3"
+  local version
+  version="$(sed -n "s/^${dep}[[:space:]]*=.*version[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$manifest" | head -n 1)"
+  [ -n "$version" ] || { echo "could not read $dep dependency version from $manifest" >&2; exit 2; }
+  if [ "$version" != "$cargo_version" ]; then
+    echo "$label $dep dependency version $version != Cargo.toml version $cargo_version" >&2
+    status=1
+  fi
+}
 
-# Both workspace crates are locked to the same version.
+check_dep_version "$mcp_cargo_toml" fmeca "crates/fmeca-mcp/Cargo.toml"
+check_dep_version "$mcp_cargo_toml" fmeca-policy "crates/fmeca-mcp/Cargo.toml"
+check_dep_version "$policy_cargo_toml" fmeca "crates/fmeca-policy/Cargo.toml"
+
+# Every workspace crate is locked to the same version.
 lock_versions="$(awk '
-  /^name = "fmeca"$/ || /^name = "fmeca-mcp"$/ { want = 1; next }
+  /^name = "fmeca"$/ || /^name = "fmeca-mcp"$/ || /^name = "fmeca-policy"$/ { want = 1; next }
   want && /^version[[:space:]]*=/ { gsub(/.*=[[:space:]]*"|".*/, ""); print; want = 0 }
 ' "$cargo_lock")"
 [ -n "$lock_versions" ] || { echo "could not read fmeca versions from $cargo_lock" >&2; exit 2; }

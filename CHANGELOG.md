@@ -4,6 +4,51 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-10-12
+
+### Added
+
+- `fmeca-policy` crate: declarative TOML risk policies, with action bands per
+  matrix cell, a deterministic confidence axis (C0-C4), low-confidence
+  fallback, dispositions, an action catalog and sign-off.
+- Policy presets: `compat-0.1` (default, equals the 0.1 readiness verdict),
+  `prototype`, `standard`, `business-critical`, `safety-critical`
+  (MIL-STD-882E) and `confidence-view`.
+- Server (`fmeca-mcp`): `actions.suggest` and `policy.list` MCP tools.
+- CLI: `suggest`, `policy validate` and `policy list` with markdown output.
+- Policy keys beyond the 0.2 design: `signoff.include_kernel_gate` (default
+  `true`), `signoff.unscored_fails` (default `true`), and the conditions
+  `rank_at_least` (band-agnostic, for the shared action catalog) and
+  `mitigation_kinds_present`.
+- Kernel gate in sign-off: `include_kernel_gate` adds the kernel's hygiene
+  blockers (CLARIFY, weak mitigation order, EMPTY) but never its RESIDUAL
+  zone blockers, so `max_residual_band` decides which residuals pass.
+- Fallback threshold and `evidence_mode` (maintainer ruling): by default
+  (`evidence_mode = "standard"`) a residual needs its own band's
+  `min_confidence`; a band that sets none borrows the nearest gated band above
+  it on a claimed reduction, so a claim to the lowest band is never free while
+  a band above it is gated.
+  The opt-in `evidence_mode = "strong"` needs the highest `min_confidence` of
+  its own band and of every band the claimed reduction leaves, so a bigger
+  claimed reduction never needs less evidence. No preset sets `strong`.
+- `compat-0.1` sets `unscored_fails = false`, so an accepted, unscored failure
+  mode passes as in 0.1 readiness, while an open one still fails (CLARIFY).
+- Docs: the `fmeca-policy` skill (with a complete `policy-template.toml`),
+  `docs/policies.md` and the `fmeca-policy` crate README.
+
+### Changed
+
+- `fmeca` (the kernel) is republished at 0.2.0 alongside `fmeca-policy`, with
+  no API change.
+- npm releases are published by the maintainer with `scripts/npm-release.sh`
+  (2FA one-time password, no stored token), from the tarball the release
+  attached. The release workflow's `npm publish` job runs only when the
+  repository variable `NPM_TRUSTED_PUBLISHING` is `true`.
+
+### Fixed
+
+- server.json description shortened to the MCP registry's 100-character limit; CI now validates server.json against the registry.
+
 ## [0.1.0] - 2026-10-12
 
 ### Added
@@ -158,6 +203,7 @@ Initial release.
 - Residual risk and scores derive from a fixed qualitative scoring catalog; the
   catalog is code-resident and not caller-extensible.
 
+[0.2.0]: https://github.com/praxec/fmeca/releases/tag/v0.2.0
 [0.1.0]: https://github.com/praxec/fmeca/releases/tag/v0.1.0
 [0.0.2]: https://github.com/praxec/fmeca/releases/tag/v0.0.2
 [0.0.1]: https://github.com/praxec/fmeca/releases/tag/v0.0.1

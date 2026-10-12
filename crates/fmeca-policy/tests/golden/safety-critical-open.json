@@ -1,0 +1,354 @@
+{
+  "policy": {
+    "name": "safety-critical",
+    "hash": "f32567038baffc60c522009c15d6a64e302f1ffc4a49261d8d42768c40a480f2",
+    "class": "safety-critical",
+    "matrix_derived_from": "qualitative3x3",
+    "source": "preset"
+  },
+  "as_of": "2026-10-12",
+  "failure_modes": [
+    {
+      "id": "fm-a",
+      "inherent_band": "high",
+      "residual_band": "high",
+      "effective_band": "high",
+      "confidence": "C0",
+      "fallback": null,
+      "status": {
+        "state": "open",
+        "suggested": "mitigate"
+      },
+      "rationale_needed": true,
+      "actions": [
+        {
+          "id": "design-review",
+          "text": "Hold a design review of this hazard with a second engineer and record the outcome",
+          "tags": [
+            "review",
+            "design"
+          ],
+          "precedence": "eliminate",
+          "required": true,
+          "why": [
+            "band high ≥ serious",
+            "required: band high ≥ serious"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "remove-failure-path",
+          "text": "Remove the single point of failure by design: add redundancy or an alternative path",
+          "tags": [
+            "design"
+          ],
+          "precedence": "eliminate",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 1",
+            "single_point true"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "simplify-design",
+          "text": "Simplify the design so this failure cannot be expressed (fewer states, stricter types)",
+          "tags": [
+            "design"
+          ],
+          "precedence": "eliminate",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 2",
+            "no implemented prevention mitigation"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "capacity-headroom-review",
+          "text": "Review capacity headroom and saturation limits on this path",
+          "tags": [
+            "ops",
+            "review"
+          ],
+          "precedence": "prevent",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 1",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "idempotency-retry-backoff",
+          "text": "Make the operation idempotent and retry with backoff",
+          "tags": [
+            "design",
+            "ops"
+          ],
+          "precedence": "prevent",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 1",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "input-validation-boundary",
+          "text": "Validate and reject input at the system boundary",
+          "tags": [
+            "design",
+            "security"
+          ],
+          "precedence": "prevent",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 1",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "prevention-before-detection",
+          "text": "Provide an engineered prevention for this serious or high hazard before relying on detection",
+          "tags": [
+            "design"
+          ],
+          "precedence": "prevent",
+          "required": true,
+          "why": [
+            "band high ≥ serious",
+            "required: band high ≥ serious",
+            "required: no implemented prevention mitigation"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "alert-leading-indicator",
+          "text": "Alert on the leading indicator of this failure before users notice it",
+          "tags": [
+            "ops"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 1",
+            "domain runtime",
+            "no implemented detection mitigation"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "chaos-experiment",
+          "text": "Run a bounded chaos experiment against the single point of failure and record the result",
+          "tags": [
+            "test",
+            "ops"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 2",
+            "domain runtime",
+            "single_point true",
+            "confidence C0 < C4"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "code-review-second-engineer",
+          "text": "Have a second engineer review the change",
+          "tags": [
+            "review"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 1",
+            "confidence C0 < C2"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "fault-injection-test",
+          "text": "Add a fault-injection test that forces this failure mode and checks the response",
+          "tags": [
+            "test"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 1",
+            "domain runtime",
+            "confidence C0 < C3"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "load-test",
+          "text": "Add or extend a load test covering this failure mode",
+          "tags": [
+            "test",
+            "ops"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 2",
+            "domain runtime",
+            "confidence C0 < C3"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "slo-error-budget",
+          "text": "Express the guard as an SLO with an error budget",
+          "tags": [
+            "ops",
+            "process"
+          ],
+          "precedence": "detect",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 2",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "backup-restore-test",
+          "text": "Rehearse backup and restore for the affected data",
+          "tags": [
+            "ops",
+            "test"
+          ],
+          "precedence": "contain",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 2",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "feature-flag-staged-rollout",
+          "text": "Put the change behind a feature flag and roll out in stages",
+          "tags": [
+            "ops",
+            "design"
+          ],
+          "precedence": "contain",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 1",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "documented-runbook",
+          "text": "Write the runbook for responding to this failure, with its verification steps",
+          "tags": [
+            "docs",
+            "ops"
+          ],
+          "precedence": "procedure",
+          "required": false,
+          "why": [
+            "band high rank 3 ≥ 2",
+            "domain runtime"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "test-and-inspection-evidence",
+          "text": "Attach test-level evidence (C3: a test, or better) to the mitigations that reduce this hazard; add inspection evidence too where it applies",
+          "tags": [
+            "test",
+            "review"
+          ],
+          "precedence": "procedure",
+          "required": true,
+          "why": [
+            "band high ≥ serious",
+            "required: band high ≥ serious",
+            "required: confidence C0 < C3"
+          ],
+          "covered_by": []
+        }
+      ]
+    },
+    {
+      "id": "fm-b",
+      "inherent_band": "medium",
+      "residual_band": "low",
+      "effective_band": "low",
+      "confidence": "C2",
+      "fallback": null,
+      "status": {
+        "state": "open",
+        "suggested": "close"
+      },
+      "rationale_needed": false,
+      "actions": [
+        {
+          "id": "secure-defaults",
+          "text": "Make the secure configuration the default",
+          "tags": [
+            "security",
+            "design"
+          ],
+          "precedence": "prevent",
+          "required": false,
+          "why": [
+            "domain security"
+          ],
+          "covered_by": [
+            "m1"
+          ]
+        }
+      ]
+    }
+  ],
+  "excluded": [],
+  "rollups": {
+    "by_band": {
+      "high": 1,
+      "low": 1
+    },
+    "by_confidence": {
+      "C0": 1,
+      "C2": 1
+    },
+    "by_status": {
+      "open": 2
+    },
+    "required_uncovered": [
+      [
+        "fm-a",
+        "design-review"
+      ],
+      [
+        "fm-a",
+        "prevention-before-detection"
+      ],
+      [
+        "fm-a",
+        "test-and-inspection-evidence"
+      ]
+    ],
+    "accepted_by_role": {},
+    "review_overdue": [],
+    "fallbacks": []
+  },
+  "signoff": {
+    "pass": false,
+    "reasons": [
+      "fm-a: effective band `high` ranks above max_residual_band `medium`",
+      "fm-a: required action `design-review` is not covered",
+      "fm-a: required action `prevention-before-detection` is not covered",
+      "fm-a: required action `test-and-inspection-evidence` is not covered"
+    ]
+  }
+}

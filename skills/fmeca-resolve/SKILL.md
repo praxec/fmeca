@@ -79,7 +79,8 @@ Acceptance keeps a residual risk on purpose. It is a human decision:
  "approver": "Dana Smith (head of payments)"}
 ```
 
-An accepted failure mode stops blocking both gates and is listed in `accepted_risks`.
+In the kernel, an accepted failure mode stops blocking both gates and is listed in
+`accepted_risks`. A risk policy is stricter: see section 4.
 
 ## 3. Exclude a failure mode that is not credible
 
@@ -98,7 +99,23 @@ Use `excluded` when the failure cannot happen, never because it is inconvenient.
 and listed in `excluded`. To undo an acceptance or exclusion, set the disposition back to
 `open` with a rationale.
 
-## 4. Report
+## 4. Use the policy's suggestions
+
+Under a risk policy, `actions.suggest` gives each failure mode a `status` with a `suggested`
+disposition and lists `rollups.review_overdue`, the acceptances past their review date. Use
+them to decide what to raise with the user: a failure mode suggested `accept` still needs a
+named approver, and an overdue acceptance needs a fresh decision. A `fallback` means the
+mitigation's evidence is too weak for the band: add the test or inspection evidence (section
+1), do not accept to make it go away. Acceptance, exclusion and status stay with the human.
+
+**Acceptance is band-gated under a policy.** It counts as a pass only when the effective
+band's `dispositions` include `accept`; otherwise policy sign-off fails with "accepted in
+band ... which does not allow acceptance". The same rule decides whether a required
+`eliminate` or `procedure` action is covered (`covered_by: ["acceptance"]`), and it also
+needs a non-empty rationale. Check the band before you ask for an approver. See
+[fmeca-policy](../fmeca-policy/SKILL.md) and [docs/policies.md](https://github.com/praxec/fmeca/blob/dev/docs/policies.md).
+
+## 5. Report
 
 Run `readiness.assess` on every session you changed and report:
 - `ready` and `verified.ready`, with `verified.blockers`: what is still only claimed;

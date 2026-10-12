@@ -1,0 +1,231 @@
+# Built-in action catalog (spec §6), shared by presets that set
+# `include_builtin_actions = true`. A preset's own action with the same id
+# replaces the built-in one.
+#
+# Conditions are band-agnostic on purpose: every preset has its own band
+# vocabulary, so a built-in action uses `rank_at_least` (the effective band's
+# rank; rank 0 is every preset's lowest band) and the cross-preset conditions
+# (domain, level, response class, disposition, single point, confidence,
+# mitigation kinds, fallback, class).
+#
+# Gating:
+# - low-cost hygiene (`secure-defaults`, `adr-for-accepted-risk`) is not gated
+#   on rank;
+# - every other action needs `rank_at_least = 1`, so a failure mode in the
+#   lowest band gets few or no suggestions;
+# - expensive actions (threat model, penetration test, chaos experiment, load
+#   test, ...) need `rank_at_least = 2` and, where it fits, a domain or
+#   single-point condition.
+
+# --- eliminate ---------------------------------------------------------------
+
+[[actions]]
+id = "remove-failure-path"
+text = "Remove the single point of failure by design: add redundancy or an alternative path"
+tags = ["design"]
+precedence = "eliminate"
+applies_when = { rank_at_least = 1, single_point = true }
+
+[[actions]]
+id = "simplify-design"
+text = "Simplify the design so this failure cannot be expressed (fewer states, stricter types)"
+tags = ["design"]
+precedence = "eliminate"
+applies_when = { rank_at_least = 2, mitigation_kinds_missing = ["prevention"] }
+
+[[actions]]
+id = "design-review"
+text = "Hold a design review of this failure mode with a second engineer"
+tags = ["review", "design"]
+precedence = "eliminate"
+applies_when = { rank_at_least = 2 }
+
+[[actions]]
+id = "boundary-review"
+text = "Review the component boundary and dependency direction that let this failure propagate"
+tags = ["design", "review"]
+precedence = "eliminate"
+applies_when = { rank_at_least = 1, domain_in = ["architecture"] }
+
+# --- prevent -----------------------------------------------------------------
+
+[[actions]]
+id = "explicit-interface-contract"
+text = "Make the interface contract between the components explicit and versioned"
+tags = ["design", "docs"]
+precedence = "prevent"
+applies_when = { rank_at_least = 1, domain_in = ["architecture"] }
+
+[[actions]]
+id = "input-validation-boundary"
+text = "Validate and reject input at the system boundary"
+tags = ["design", "security"]
+precedence = "prevent"
+applies_when = { rank_at_least = 1, domain_in = ["security", "runtime"] }
+
+[[actions]]
+id = "idempotency-retry-backoff"
+text = "Make the operation idempotent and retry with backoff"
+tags = ["design", "ops"]
+precedence = "prevent"
+applies_when = { rank_at_least = 1, domain_in = ["runtime", "delivery"] }
+
+[[actions]]
+id = "secure-defaults"
+text = "Make the secure configuration the default"
+tags = ["security", "design"]
+precedence = "prevent"
+applies_when = { domain_in = ["security"] }
+
+[[actions]]
+id = "dependency-pinning-update-policy"
+text = "Pin dependencies and adopt a reviewed update policy"
+tags = ["process", "security"]
+precedence = "prevent"
+applies_when = { rank_at_least = 1, domain_in = ["security", "delivery"] }
+
+[[actions]]
+id = "threat-model"
+text = "Threat-model this failure mode with the security team"
+tags = ["security", "design"]
+precedence = "prevent"
+applies_when = { rank_at_least = 2, domain_in = ["security"] }
+
+[[actions]]
+id = "privacy-review"
+text = "Review the data flows for privacy impact"
+tags = ["security", "review"]
+precedence = "prevent"
+applies_when = { rank_at_least = 1, domain_in = ["security"] }
+
+[[actions]]
+id = "capacity-headroom-review"
+text = "Review capacity headroom and saturation limits on this path"
+tags = ["ops", "review"]
+precedence = "prevent"
+applies_when = { rank_at_least = 1, domain_in = ["runtime"] }
+
+[[actions]]
+id = "accessibility-review"
+text = "Review the user-facing path for accessibility impact"
+tags = ["review", "design"]
+precedence = "prevent"
+applies_when = { rank_at_least = 1, domain_in = ["ux"] }
+
+# --- detect ------------------------------------------------------------------
+
+[[actions]]
+id = "contract-property-test"
+text = "Add a contract or property test for the invariant this failure mode breaks"
+tags = ["test"]
+precedence = "detect"
+applies_when = { rank_at_least = 1, confidence_below = "C3", domain_in = ["architecture", "security", "ux"] }
+
+[[actions]]
+id = "fault-injection-test"
+text = "Add a fault-injection test that forces this failure mode and checks the response"
+tags = ["test"]
+precedence = "detect"
+applies_when = { rank_at_least = 1, confidence_below = "C3", domain_in = ["runtime", "delivery"] }
+
+[[actions]]
+id = "load-test"
+text = "Add or extend a load test covering this failure mode"
+tags = ["test", "ops"]
+precedence = "detect"
+applies_when = { rank_at_least = 2, confidence_below = "C3", domain_in = ["runtime"] }
+
+[[actions]]
+id = "code-review-second-engineer"
+text = "Have a second engineer review the change"
+tags = ["review"]
+precedence = "detect"
+applies_when = { rank_at_least = 1, confidence_below = "C2" }
+
+[[actions]]
+id = "static-analysis-rule"
+text = "Add a static-analysis rule that catches this class of defect"
+tags = ["test", "process"]
+precedence = "detect"
+applies_when = { rank_at_least = 1, mitigation_kinds_missing = ["detection"], domain_in = ["architecture", "security", "ux"] }
+
+[[actions]]
+id = "alert-leading-indicator"
+text = "Alert on the leading indicator of this failure before users notice it"
+tags = ["ops"]
+precedence = "detect"
+applies_when = { rank_at_least = 1, mitigation_kinds_missing = ["detection"], domain_in = ["runtime", "delivery"] }
+
+[[actions]]
+id = "slo-error-budget"
+text = "Express the guard as an SLO with an error budget"
+tags = ["ops", "process"]
+precedence = "detect"
+applies_when = { rank_at_least = 2, domain_in = ["runtime"] }
+
+[[actions]]
+id = "chaos-experiment"
+text = "Run a bounded chaos experiment against the single point of failure and record the result"
+tags = ["test", "ops"]
+precedence = "detect"
+applies_when = { rank_at_least = 2, single_point = true, domain_in = ["runtime"], confidence_below = "C4" }
+
+[[actions]]
+id = "penetration-test"
+text = "Commission a penetration test of the affected surface"
+tags = ["security", "test"]
+precedence = "detect"
+applies_when = { rank_at_least = 2, domain_in = ["security"] }
+
+# --- contain -----------------------------------------------------------------
+
+[[actions]]
+id = "feature-flag-staged-rollout"
+text = "Put the change behind a feature flag and roll out in stages"
+tags = ["ops", "design"]
+precedence = "contain"
+applies_when = { rank_at_least = 1, domain_in = ["delivery", "runtime"] }
+
+[[actions]]
+id = "canary-automatic-rollback"
+text = "Canary the change with automatic rollback"
+tags = ["ops"]
+precedence = "contain"
+applies_when = { rank_at_least = 1, response_class_in = ["restructure", "re_architecture"] }
+
+[[actions]]
+id = "backup-restore-test"
+text = "Rehearse backup and restore for the affected data"
+tags = ["ops", "test"]
+precedence = "contain"
+applies_when = { rank_at_least = 2, domain_in = ["runtime"] }
+
+[[actions]]
+id = "data-migration-rehearsal"
+text = "Rehearse the data migration on a production-like copy"
+tags = ["process", "ops"]
+precedence = "contain"
+applies_when = { rank_at_least = 1, domain_in = ["delivery"] }
+
+# --- procedure ---------------------------------------------------------------
+
+[[actions]]
+id = "adr-for-accepted-risk"
+text = "Record an ADR for the accepted risk and its assumptions"
+tags = ["docs", "process"]
+precedence = "procedure"
+applies_when = { disposition_in = ["accepted"] }
+
+[[actions]]
+id = "on-call-handoff-note"
+text = "Leave an on-call handoff note describing the accepted residual risk and how to recognise it"
+tags = ["ops", "docs"]
+precedence = "procedure"
+applies_when = { rank_at_least = 1, disposition_in = ["accepted"], domain_in = ["runtime", "delivery"] }
+
+[[actions]]
+id = "documented-runbook"
+text = "Write the runbook for responding to this failure, with its verification steps"
+tags = ["docs", "ops"]
+precedence = "procedure"
+applies_when = { rank_at_least = 2, domain_in = ["runtime", "delivery"] }
