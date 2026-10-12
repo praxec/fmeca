@@ -1,9 +1,12 @@
 //! Reading a project policy from `<policies_dir>/<name>.toml`.
 
 use std::fs;
+use std::io::ErrorKind;
 use std::path::Path;
 
-use crate::{LoadedPolicy, PolicyError, PolicySource, parse_policy, policy_hash, validate};
+use crate::{
+    LoadedPolicy, PolicyError, PolicySource, invalid, parse_policy, policy_hash, validate,
+};
 
 /// `true` when `name` matches `^[a-z0-9][a-z0-9-]{0,63}$`: a preset name or a
 /// file stem in the policies directory. Anything else cannot name a policy.
@@ -23,7 +26,8 @@ pub fn valid_policy_name(name: &str) -> bool {
 /// Returns [`PolicyError::NotFound`] when `name` is not a
 /// [valid policy name](valid_policy_name), when the file is absent or not a
 /// regular file, or when it resolves (through a symlink) to anything outside
-/// `policies_dir`. A file that is found but malformed is
+/// `policies_dir`, or cannot be read. A file that is found but is not UTF-8,
+/// is malformed, or whose `name` differs from its file stem is
 /// [`PolicyError::Invalid`].
 pub fn load_project_policy(policies_dir: &Path, name: &str) -> Result<LoadedPolicy, PolicyError> {
     let not_found = || PolicyError::NotFound(name.to_string());
@@ -37,9 +41,18 @@ pub fn load_project_policy(policies_dir: &Path, name: &str) -> Result<LoadedPoli
     if path.parent() != Some(dir.as_path()) || !path.is_file() {
         return Err(not_found());
     }
-    let text = fs::read_to_string(&path).map_err(|_| not_found())?;
+    let text = fs::read_to_string(&path).map_err(|e| match e.kind() {
+        ErrorKind::InvalidData => invalid("toml", "not UTF-8"),
+        _ => not_found(),
+    })?;
     let policy = parse_policy(&text)?;
     validate(&policy)?;
+    if policy.name != name {
+        return Err(invalid(
+            "name",
+            format!("must equal the file name '{name}'"),
+        ));
+    }
     let hash = policy_hash(&policy);
     Ok(LoadedPolicy {
         policy,

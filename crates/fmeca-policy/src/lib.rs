@@ -28,7 +28,7 @@ pub use model::{
     Action, Band, Conditions, Confidence, DispositionKind, Matrix, Policy, Precedence,
     SCHEMA_VERSION, Signoff,
 };
-pub use validate::{parse_days, validate};
+pub use validate::{STANDARD_BAND_COUNT, parse_days, validate};
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};

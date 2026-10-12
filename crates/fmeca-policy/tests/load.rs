@@ -103,3 +103,29 @@ fn symlink_escaping_dir_is_not_found() {
         Err(PolicyError::NotFound(_))
     ));
 }
+
+#[test]
+fn project_policy_name_must_match_file_stem() {
+    let dir = policies_dir("name_mismatch");
+    fs::copy(dir.join("minimal.toml"), dir.join("renamed.toml")).expect("copy policy");
+    assert_eq!(
+        load_project_policy(&dir, "renamed"),
+        Err(PolicyError::Invalid {
+            field: "name".to_string(),
+            reason: "must equal the file name 'renamed'".to_string(),
+        })
+    );
+}
+
+#[test]
+fn non_utf8_policy_file_is_invalid() {
+    let dir = policies_dir("non_utf8");
+    fs::write(dir.join("binary.toml"), [0xff, 0xfe, 0x00, 0x80]).expect("write bytes");
+    assert_eq!(
+        load_project_policy(&dir, "binary"),
+        Err(PolicyError::Invalid {
+            field: "toml".to_string(),
+            reason: "not UTF-8".to_string(),
+        })
+    );
+}

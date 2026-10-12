@@ -170,3 +170,75 @@ fn hash_changes_with_a_cell() {
     let b = policy_hash(&parse_policy(&changed).expect("changed parses"));
     assert_ne!(a, b);
 }
+
+/// `MINIMAL` plus a `confidence` matrix: rows `standard` band rank 0..2,
+/// columns C4…C0.
+fn with_confidence(rows: &str) -> String {
+    format!(
+        "{MINIMAL}\n[matrices.confidence]\nderived_from = \"standard-bands\"\ncells = [\n{rows}]\n"
+    )
+}
+
+const CONFIDENCE_ROWS: &str = "  [\"none\", \"none\", \"none\", \"none\", \"none\"],\n  [\"none\", \"none\", \"none\", \"act\", \"act\"],\n  [\"act\", \"act\", \"act\", \"act\", \"act\"],\n";
+
+#[test]
+fn confidence_matrix_wrong_size_is_rejected() {
+    let rows = CONFIDENCE_ROWS.replace("  [\"act\", \"act\", \"act\", \"act\", \"act\"],\n", "");
+    assert_eq!(
+        invalid_field(check(&with_confidence(&rows))).as_deref(),
+        Some("matrices.confidence.cells")
+    );
+}
+
+#[test]
+fn confidence_matrix_rising_confidence_must_not_lower_rank() {
+    // Row 0 is `act` at C4 but `none` at C3: rank falls as confidence falls.
+    let rows = CONFIDENCE_ROWS.replacen(
+        "[\"none\", \"none\", \"none\", \"none\", \"none\"]",
+        "[\"act\", \"none\", \"none\", \"none\", \"none\"]",
+        1,
+    );
+    assert_eq!(
+        invalid_field(check(&with_confidence(&rows))).as_deref(),
+        Some("matrices.confidence.cells[0][1]")
+    );
+}
+
+#[test]
+fn confidence_matrix_wrong_derived_from_is_rejected() {
+    let text = with_confidence(CONFIDENCE_ROWS).replace(
+        "derived_from = \"standard-bands\"",
+        "derived_from = \"qualitative3x3\"",
+    );
+    assert_eq!(
+        invalid_field(check(&text)).as_deref(),
+        Some("matrices.confidence.derived_from")
+    );
+}
+
+#[test]
+fn schema_2_is_rejected() {
+    let text = MINIMAL.replace("schema = 1", "schema = 2");
+    assert_eq!(invalid_field(check(&text)).as_deref(), Some("schema"));
+}
+
+#[test]
+fn missing_sxp_matrix_is_rejected() {
+    let start = MINIMAL.find("[matrices.qualitative3x3]").expect("matrix");
+    let end = MINIMAL.find("[signoff]").expect("signoff");
+    // Only the confidence matrix is left.
+    let text = with_confidence(CONFIDENCE_ROWS);
+    let text = format!("{}{}", &text[..start], &text[end..]);
+    assert_eq!(invalid_field(check(&text)).as_deref(), Some("matrices"));
+}
+
+#[test]
+fn unknown_band_in_action_condition_is_rejected() {
+    let text = format!(
+        "{MINIMAL}\n[[actions]]\nid = \"review\"\ntext = \"Review it\"\ntags = []\nprecedence = \"detect\"\napplies_when = {{ band_in = [\"act\", \"severe\"] }}\n"
+    );
+    assert_eq!(
+        invalid_field(check(&text)).as_deref(),
+        Some("actions[0].applies_when.band_in[1]")
+    );
+}

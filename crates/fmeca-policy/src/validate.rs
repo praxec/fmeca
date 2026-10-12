@@ -12,9 +12,13 @@ const SXP_MATRICES: [(&str, usize); 2] = [("qualitative3x3", 3), ("nasa8004_5x5"
 const CONFIDENCE_KEY: &str = "confidence";
 /// The confidence matrix's `derived_from`.
 const CONFIDENCE_DERIVED_FROM: &str = "standard-bands";
-/// Rows of the confidence matrix: one per band of the built-in `standard`
+/// Rows of the `confidence` matrix: one per band of the built-in `standard`
 /// preset (spec §3, §6), by rank ascending.
-const STANDARD_BAND_COUNT: usize = 3;
+///
+/// The `standard` preset must have exactly this many bands, with ranks
+/// `0..STANDARD_BAND_COUNT` contiguous: the confidence matrix and the
+/// evaluator index its rows by `standard` band rank.
+pub const STANDARD_BAND_COUNT: usize = 3;
 /// Columns of the confidence matrix: `C4`…`C0`.
 const CONFIDENCE_COLUMNS: usize = 5;
 
