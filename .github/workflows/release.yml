@@ -205,6 +205,10 @@ jobs:
     # trusted publisher on npmjs.com names praxec/fmeca, release.yml and the
     # `npm` environment). There is no npm token; the environment requires a
     # maintainer's approval before the job starts. Provenance is attached.
+    # Off until the trusted publisher exists (repository variable
+    # NPM_TRUSTED_PUBLISHING=true); meanwhile the maintainer publishes with
+    # scripts/npm-release.sh (docs/releasing.md step 5).
+    if: vars.NPM_TRUSTED_PUBLISHING == 'true'
     environment: npm
     permissions:
       contents: read

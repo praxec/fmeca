@@ -97,101 +97,65 @@ The workflow then runs these jobs:
 4. **container image**: builds the image from the repository and pushes
    `ghcr.io/praxec/fmeca` for linux/amd64 and linux/arm64 with the tags
    `X.Y.Z`, `X.Y` and `latest`.
-5. **npm publish**: waits for approval in the `npm` environment, then
-   publishes that same tarball as `@matthew-cochran/fmeca` (see step 5).
+5. **npm publish**: skipped unless npm trusted publishing is set up; the
+   maintainer publishes that same tarball with `scripts/npm-release.sh`
+   (see step 5).
 6. **MCP registry**: publishes `server.json` as `io.github.praxec/fmeca` with
    a pinned, checksum-verified `mcp-publisher` over GitHub OIDC. This job is
    best-effort (`continue-on-error`), so a failure does not fail the release;
    check its log.
 
-## 5. Approve the npm publish
+## 5. Publish to npm
 
-The `npm publish` job publishes the npm launcher (`npm/`, package
-`@matthew-cochran/fmeca`) with npm trusted publishing: npm authenticates the
-job over GitHub OIDC, so the repository holds no npm token, and the package
-gets a provenance attestation. The job runs in the `npm` environment, which
-waits for a maintainer's approval. Approve it from the run page (**Review
-deployments**) as soon as the release is public (for 0.1.0, first follow
-[First release only](#first-release-only-010) below). The launcher downloads the
-GitHub release whose version equals its own, and until the publish the
+The npm launcher (`npm/`, package `@matthew-cochran/fmeca`) downloads the
+GitHub release whose version equals its own. So publish it only after the
+release is public (step 4 ends with the release published). Until then the
 documented `npx -y @matthew-cochran/fmeca` and
 `npm install -g @matthew-cochran/fmeca` commands fail with a 404 from the
 registry.
 
-The job publishes the tarball attached to the release after checking it against
-`npm-package.sha256`, so npm gets exactly that file. A version that is already
-on npm is skipped, so re-running the job is safe. Pre-release versions
-(`X.Y.Z-rc.N`) go to the `next` dist-tag. The job ends by running
-`npx -y @matthew-cochran/fmeca@X.Y.Z --version`.
+Publish with the release script, logged in to npm (`npm login`) as an owner of
+the `@matthew-cochran` scope and to GitHub (`gh auth login`):
 
-One-time setup: on npmjs.com, the package's
-**Settings → Trusted publishing** names GitHub Actions, the repository
-`praxec/fmeca`, the workflow `release.yml` and the environment `npm`; on
-GitHub, the `npm` environment has required reviewers and allows only `v*` tags.
+```sh
+git checkout vX.Y.Z
+bash scripts/npm-release.sh            # version from npm/package.json; or: bash scripts/npm-release.sh X.Y.Z
+```
+
+The script:
+
+1. refuses to run unless the GitHub release `vX.Y.Z` exists and is not a draft;
+2. downloads the `matthew-cochran-fmeca-X.Y.Z.tgz` that release.yml attached,
+   checks it against `npm-package.sha256`, and checks that it holds only
+   `LICENSE`, `NOTICE`, `README.md`, `package.json`, `bin/` and `lib/`;
+3. publishes that file with `scripts/npm-publish.sh --local`, so npm prompts
+   for your 2FA one-time password. A version already on npm is skipped, and
+   pre-releases (`X.Y.Z-rc.N`) go to the `next` dist-tag;
+4. waits (up to `FMECA_RELEASE_WAIT_SECS`, default 180) for the registry to
+   serve the version, then checks that
+   `npx -y @matthew-cochran/fmeca@X.Y.Z --version` prints `fmeca-mcp X.Y.Z`.
+
+It never tags, pushes or edits the release. The same approach as jevitate's
+`scripts/release.sh`: no npm token is stored, and the publish carries no
+provenance attestation (only a trusted-publishing run can create one).
+
+### Optional: npm trusted publishing
+
+release.yml has an **npm publish** job that publishes the same tarball over
+GitHub OIDC with provenance. It is off until you set it up:
+
+1. On npmjs.com, the package's **Settings → Trusted publishing** names GitHub
+   Actions, the repository `praxec/fmeca`, the workflow `release.yml` and the
+   environment `npm`.
+2. On GitHub, the `npm` environment has required reviewers and allows only
+   `v*` tags.
+3. Set the repository variable `NPM_TRUSTED_PUBLISHING` to `true`.
+
+The job then waits for approval in the `npm` environment after each release;
+approving it is the whole npm step. It skips a version already on npm, so it is
+safe after a manual publish.
 
 **The npm trusted publisher must name the workflow file exactly `release.yml` (cpm-planner 0.2.2's publish 404'd because it said `release.yaml`).**
-
-### First release only (0.1.0)
-
-npm can only set up trusted publishing for a package that already exists, so
-0.1.0 is published by hand, from the tarball the release attached, before the
-`npm` job is approved:
-
-1. Tag `v0.1.0` (step 4).
-2. The **aggregate metadata + publish** job attaches
-   `matthew-cochran-fmeca-0.1.0.tgz` and `npm-package.sha256` to the release.
-   The **npm publish** job then waits for approval in the `npm` environment;
-   do not approve it yet.
-3. Download both files and check the digest:
-
-   ```sh
-   mkdir -p /tmp/fmeca-npm && cd /tmp/fmeca-npm
-   gh release download v0.1.0 --repo praxec/fmeca \
-     --pattern 'matthew-cochran-fmeca-0.1.0.tgz' --pattern npm-package.sha256
-   sha256sum -c npm-package.sha256          # must print OK; stop if it does not
-   ```
-
-4. Logged in to npm (`npm login`) as an owner of the `@matthew-cochran` scope,
-   publish that tarball with 2FA:
-
-   ```sh
-   npm publish ./matthew-cochran-fmeca-0.1.0.tgz --access public   # prompts for the 2FA code
-   ```
-
-5. On npmjs.com, configure the trusted publisher for
-   `@matthew-cochran/fmeca`: GitHub Actions, repository `praxec/fmeca`,
-   workflow `release.yml`, environment `npm`.
-6. Approve the **npm publish** job. It skips the publish, because 0.1.0 is
-   already on npm, and runs the `npx -y @matthew-cochran/fmeca@0.1.0 --version`
-   verification.
-
-From 0.1.1 on, approving the job is the whole npm step.
-
-### Manual fallback
-
-If the job cannot publish (for example, trusted publishing is misconfigured),
-publish the same tarball by hand. You need to be logged in to npm
-(`npm login`) as an owner of the `@matthew-cochran` scope, with 2FA:
-
-```sh
-mkdir -p /tmp/fmeca-npm && cd /tmp/fmeca-npm
-gh release download vX.Y.Z --repo praxec/fmeca \
-  --pattern 'matthew-cochran-fmeca-X.Y.Z.tgz' --pattern npm-package.sha256
-sha256sum -c npm-package.sha256          # must print OK; stop if it does not
-tar -tzf matthew-cochran-fmeca-X.Y.Z.tgz # package/{LICENSE,NOTICE,README.md,package.json,bin/,lib/} only, no tests
-npm publish ./matthew-cochran-fmeca-X.Y.Z.tgz --access public   # prompts for the 2FA code
-```
-
-Verify from a clean cache, outside the repository:
-
-```sh
-npx -y @matthew-cochran/fmeca@X.Y.Z --version
-node scripts/mcp-smoke.mjs npx -y @matthew-cochran/fmeca@X.Y.Z   # from a checkout of vX.Y.Z
-```
-
-The first command prints `fmeca-mcp X.Y.Z` on stdout after a one-time
-download whose progress goes to stderr. The smoke test checks that the launcher
-keeps stdout clean for MCP (`initialize` and `tools/list`).
 
 ## 6. Verify the release
 

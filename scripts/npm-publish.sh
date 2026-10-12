@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Publish the npm launcher tarball for a release (the `npm` job in release.yml).
-# Usage: scripts/npm-publish.sh <tarball> <version> [--dry-run]
+# Usage: scripts/npm-publish.sh <tarball> <version> [--dry-run | --local]
 #
 # A version already on npm is skipped, so re-running is safe. Pre-releases
 # (X.Y.Z-rc.N) go to the `next` dist-tag, never `latest`. --dry-run runs
-# `npm publish --dry-run` (CI uses it on every PR) and skips the provenance
-# attestation, which only a trusted-publishing run can create.
+# `npm publish --dry-run` (CI uses it on every PR). --dry-run and --local skip
+# the provenance attestation, which only a trusted-publishing run can create;
+# --local is the maintainer's publish from scripts/npm-release.sh (npm prompts
+# for the 2FA one-time password).
 set -euo pipefail
 
 pkg="@matthew-cochran/fmeca"
@@ -13,9 +15,11 @@ pkg="@matthew-cochran/fmeca"
 tarball=$1
 version=$2
 dry_run=false
+provenance=true
 case "${3:-}" in
   "") ;;
-  --dry-run) dry_run=true ;;
+  --dry-run) dry_run=true; provenance=false ;;
+  --local) provenance=false ;;
   *) echo "unknown option: $3" >&2; exit 2 ;;
 esac
 
@@ -43,7 +47,8 @@ case "$version" in *-*) dist_tag=next ;; esac
 args=(publish "$tarball" --access public --tag "$dist_tag")
 if [ "$dry_run" = true ]; then
   args+=(--dry-run)
-else
+fi
+if [ "$provenance" = true ]; then
   args+=(--provenance)
 fi
 npm "${args[@]}"
