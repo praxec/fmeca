@@ -48,8 +48,10 @@ Read the result:
 - per failure mode: `inherent_band`, `residual_band` and `effective_band`; `confidence`
   (C0 declared only, up to C4 proven in use, from the mitigations' evidence); `fallback`;
   `status`; `rationale_needed`; `actions`.
-- `fallback`: when confidence is below the band's minimum, the **inherent** band stands in
-  for the residual. It only ever raises the band. The cure is evidence, not a rescore:
+- `fallback`: when confidence is below the required minimum, the **inherent** band stands
+  in for the residual. The minimum is the highest `min_confidence` of the residual band and
+  of every band the claimed reduction leaves, so a claim to leave `high` needs `high`'s
+  evidence even when the target band asks for none. It only ever raises the band. The cure is evidence, not a rescore:
   move the mitigation with [fmeca-resolve](../fmeca-resolve/SKILL.md) and cite the test or
   inspection.
 - `status.state` is `unscored`, `open` or `accepted`. Unscored and open carry a `suggested`

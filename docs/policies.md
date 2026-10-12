@@ -93,11 +93,23 @@ fails sign-off as `unscored`.
 
 ## Fallback rule (MIL-STD-882E Table VI)
 
-A residual counts in its band only at or above that band's `min_confidence`.
-When the confidence is below it, the **inherent** band is effective instead,
-and the result carries `fallback {from, to, reason}`. A fallback only ever
-raises the band: low confidence never lowers a residual, and a fallback is
-only reported when the inherent band ranks above the residual band.
+A residual counts only when its confidence reaches the **required
+confidence**: the highest `min_confidence` over the residual band itself
+**and every band the claimed reduction leaves** — the bands ranked above the
+residual band and at or below the inherent band. Claiming to leave a band
+needs that band's evidence, so a bigger claimed reduction never needs less
+evidence, and a reduction to a lowest band that sets no `min_confidence` of
+its own still needs the evidence of the bands it leaves. (Under
+`safety-critical`, a mitigation claiming `high` → `low` needs C3, the
+`min_confidence` of `serious` and `high`; under `standard`, `review` →
+`none` needs C2.)
+
+When the confidence is below the required confidence, the **inherent** band
+is effective instead, and the result carries `fallback {from, to, reason}`;
+the reason names the band whose `min_confidence` set the requirement. A
+fallback only ever raises the band: low confidence never lowers a residual,
+and a fallback is only reported when the inherent band ranks above the
+residual band.
 
 Under `confidence-view`, the fallback is computed under the `standard` preset,
 so `fallback {from, to}` name **standard's** bands (`none` / `compensate` /

@@ -239,6 +239,20 @@
       ]
     },
     {
+      "id": "fm-claimed",
+      "inherent_band": "review",
+      "residual_band": "none",
+      "effective_band": "none",
+      "confidence": "C2",
+      "fallback": null,
+      "status": {
+        "state": "open",
+        "suggested": "close"
+      },
+      "rationale_needed": false,
+      "actions": []
+    },
+    {
       "id": "fm-unscored",
       "inherent_band": null,
       "residual_band": null,
@@ -261,14 +275,17 @@
   ],
   "rollups": {
     "by_band": {
+      "none": 1,
       "review": 1,
       "unscored": 1
     },
     "by_confidence": {
-      "C0": 2
+      "C0": 2,
+      "C2": 1
     },
     "by_status": {
       "accepted": 1,
+      "open": 1,
       "unscored": 1
     },
     "required_uncovered": [],

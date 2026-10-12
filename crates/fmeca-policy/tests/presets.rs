@@ -15,9 +15,9 @@ use fmeca::{
 };
 use fmeca_policy::presets::{PRESET_NAMES, builtin_actions, preset, resolve};
 use fmeca_policy::{
-    Accepted, Conditions, Date, KernelGate, LoadedPolicy, PolicyError, PolicySource,
-    STANDARD_BAND_COUNT, Subject, SubjectFm, SubjectMitigation, evaluate, parse_date, parse_policy,
-    policy_hash, subject_from_analysis, subject_from_state, validate,
+    Accepted, Conditions, Confidence, Date, KernelGate, LoadedPolicy, PolicyError, PolicySource,
+    STANDARD_BAND_COUNT, Subject, SubjectFm, SubjectMitigation, Suggestions, evaluate, parse_date,
+    parse_policy, policy_hash, subject_from_analysis, subject_from_state, validate,
 };
 
 fn as_of() -> Date {
@@ -725,6 +725,120 @@ fn kernel_gate_keeps_hygiene_blockers() {
     );
 }
 
+// --- the fallback threshold is monotone in the claimed reduction (C2) --------
+
+/// The first 5×5 cell (row order) of `band` in `preset_name`.
+fn cell_of(preset_name: &str, band: &str) -> (u8, u8) {
+    let loaded = preset(preset_name).expect("preset");
+    let cells = &loaded.policy.matrices["nasa8004_5x5"].cells;
+    cells
+        .iter()
+        .enumerate()
+        .find_map(|(s, row)| {
+            row.iter()
+                .position(|b| b == band)
+                .map(|p| (s as u8 + 1, p as u8 + 1))
+        })
+        .expect("band has a cell")
+}
+
+/// Evidence reaching exactly `confidence`.
+fn evidence_at(confidence: Confidence) -> Vec<ResolutionEvidence> {
+    use fmeca::{EvidenceBasis as B, EvidenceKind as K};
+    match confidence {
+        Confidence::C0 => Vec::new(),
+        Confidence::C1 => vec![evidence(K::File, None)],
+        Confidence::C2 => vec![evidence(K::Commit, None)],
+        Confidence::C3 => vec![evidence(K::Test, None)],
+        Confidence::C4 => vec![evidence(K::Url, Some(B::OperationalUse))],
+    }
+}
+
+/// One failure mode with inherent `from` and an implemented prevention
+/// claiming `to`, its evidence at `confidence`, evaluated under `preset_name`
+/// on the 5×5 strategy.
+fn claimed(preset_name: &str, from: &str, to: &str, confidence: Confidence) -> Suggestions {
+    let mut fm = open_fm("fm1", Domain::Runtime, false, cell_of(preset_name, from));
+    let residual = cell_of(preset_name, to);
+    fm.residual = Some(residual);
+    fm.mitigations.push(mitigation(
+        "m1",
+        MitigationKind::Prevention,
+        MitigationStatus::Implemented,
+        residual,
+        evidence_at(confidence),
+    ));
+    let subject = subject(MatrixStrategy::Nasa8004_5x5, None, vec![fm]);
+    evaluate(&subject, &preset(preset_name).expect("preset"), as_of()).unwrap()
+}
+
+#[test]
+fn claimed_reduction_to_lowest_band_needs_the_left_bands_evidence_under_standard() {
+    // Leaving `review` needs C2; C1 evidence falls back to `review`.
+    let s = claimed("standard", "review", "none", Confidence::C1);
+    assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
+}
+
+#[test]
+fn claimed_reduction_to_lowest_band_needs_the_left_bands_evidence_under_safety_critical() {
+    // Leaving `high` needs C3; C2 evidence falls back to `high`.
+    let s = claimed("safety-critical", "high", "low", Confidence::C2);
+    assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("high"));
+}
+
+#[test]
+fn full_reduction_with_sufficient_evidence_passes() {
+    let s = claimed("safety-critical", "high", "low", Confidence::C3);
+    assert!(s.signoff.pass, "{:?}", s.signoff.reasons);
+}
+
+/// The lowest confidence at which a claimed `from` → `to` reduction counts
+/// (no fallback); 5 when even C4 falls back.
+fn needed_confidence(preset_name: &str, from: &str, to: &str) -> usize {
+    const LADDER: [Confidence; 5] = [
+        Confidence::C0,
+        Confidence::C1,
+        Confidence::C2,
+        Confidence::C3,
+        Confidence::C4,
+    ];
+    LADDER
+        .iter()
+        .position(|&c| {
+            claimed(preset_name, from, to, c).failure_modes[0]
+                .fallback
+                .is_none()
+        })
+        .unwrap_or(LADDER.len())
+}
+
+/// For every preset with its own S×P bands (`confidence-view` takes its
+/// fallback from `standard`), every inherent band and every pair of lower
+/// residual bands: the bigger claimed reduction never needs less evidence.
+#[test]
+fn fallback_threshold_is_monotone_in_claimed_reduction() {
+    let mut violations = Vec::new();
+    for name in PRESET_NAMES.iter().filter(|n| **n != "confidence-view") {
+        let mut bands = preset(name).expect("preset").policy.bands;
+        bands.sort_by_key(|b| b.rank);
+        for (i, inherent) in bands.iter().enumerate() {
+            for (j, bigger) in bands[..i].iter().enumerate() {
+                for smaller in &bands[j + 1..i] {
+                    let big = needed_confidence(name, &inherent.id, &bigger.id);
+                    let small = needed_confidence(name, &inherent.id, &smaller.id);
+                    if big < small {
+                        violations.push(format!(
+                            "{name}: {} → {} needs C{big} < {} → {} needs C{small}",
+                            inherent.id, bigger.id, inherent.id, smaller.id
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    assert!(violations.is_empty(), "{violations:#?}");
+}
+
 // --- safety-critical against MIL-STD-882E Table III --------------------------
 
 /// MIL-STD-882E Table III: rows probability A (Frequent) .. E (Improbable),
@@ -1087,10 +1201,22 @@ fn golden_mixed() -> Subject {
         accepted: None,
         mitigations: Vec::new(),
     };
+    // Worst cell claimed down to the best by an implemented prevention with
+    // commit evidence (C2): enough to leave `standard`'s `review` (C2), not
+    // `business-critical`'s `review` or `safety-critical`'s `high` (C3).
+    let mut claimed = open_fm("fm-claimed", Domain::Runtime, false, (5, 5));
+    claimed.residual = Some((1, 1));
+    claimed.mitigations.push(mitigation(
+        "m1",
+        MitigationKind::Prevention,
+        MitigationStatus::Implemented,
+        (1, 1),
+        vec![evidence(fmeca::EvidenceKind::Commit, None)],
+    ));
     subject(
         MatrixStrategy::Nasa8004_5x5,
         None,
-        vec![accepted, excluded, unscored],
+        vec![accepted, claimed, excluded, unscored],
     )
 }
 

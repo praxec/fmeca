@@ -17,8 +17,12 @@
 //!    kernel's rule applies and the residual is the inherent band.
 //! 3. **Confidence**: [`residual_confidence`].
 //! 4. **Effective band**: the residual band, unless the confidence is below
-//!    the residual band's `min_confidence`; then the inherent band, reported
-//!    as a [`Fallback`]. A fallback only ever raises the band: it applies
+//!    the required confidence — the highest `min_confidence` over the
+//!    residual band and every band the claimed reduction leaves (ranked
+//!    above the residual band, at or below the inherent band); then the
+//!    inherent band, reported as a [`Fallback`]. Claiming to leave a band
+//!    needs that band's evidence, so the threshold is monotone in the
+//!    claimed reduction. A fallback only ever raises the band: it applies
 //!    when the inherent band ranks above the residual band.
 //! 5. **Disposition**: accepted (with review status), or a suggested
 //!    disposition for an open failure mode; `rationale_needed`.
@@ -654,7 +658,8 @@ struct Banded<'p> {
     inherent: Option<&'p Band>,
     residual: Option<&'p Band>,
     effective: Option<&'p Band>,
-    /// Confidence is below the residual band's `min_confidence`.
+    /// Confidence is below the residual's required confidence
+    /// ([`required_confidence`]).
     low_confidence: bool,
     fallback: Option<FallbackRef<'p>>,
 }
@@ -664,7 +669,30 @@ struct Banded<'p> {
 struct FallbackRef<'p> {
     from: &'p Band,
     to: &'p Band,
+    /// The required confidence ([`required_confidence`]).
     threshold: Confidence,
+    /// The band whose `min_confidence` set `threshold`.
+    needed_by: &'p Band,
+}
+
+/// The confidence a residual needs to count (rule 4; 0.2 final review
+/// ruling): the highest `min_confidence` over the residual band itself and
+/// every band the claimed reduction leaves — those ranked above the residual
+/// band and at or below the inherent band — with the band that sets it
+/// (the highest-ranked on a tie). Claiming to leave a band needs that band's
+/// evidence, so a bigger claimed reduction never needs less. `None` when none
+/// of those bands sets a `min_confidence`.
+fn required_confidence<'p>(
+    policy: &'p Policy,
+    inherent: &Band,
+    residual: &'p Band,
+) -> Option<(Confidence, &'p Band)> {
+    policy
+        .bands
+        .iter()
+        .filter(|b| b.id == residual.id || (b.rank > residual.rank && b.rank <= inherent.rank))
+        .filter_map(|b| b.min_confidence.map(|m| (m, b)))
+        .max_by_key(|(m, b)| (*m, b.rank))
 }
 
 /// Rules 1, 2 and 4 under `policy`'s S×P `matrix`.
@@ -688,17 +716,20 @@ fn bands<'p>(
         Some(cell) => sxp_cell(policy, matrix, cell)?,
         None => inherent,
     };
-    let threshold = residual.min_confidence.filter(|&m| confidence < m);
-    let low_confidence = fm.residual.is_some() && threshold.is_some();
-    let fallback = match threshold {
+    let required = required_confidence(policy, inherent, residual).filter(|r| confidence < r.0);
+    let low_confidence = fm.residual.is_some() && required.is_some();
+    let fallback = match required {
         // Fall back only to a worse inherent band: low confidence never
         // lowers the band (a residual can be worse than the inherent value,
         // e.g. after a rescore down).
-        Some(threshold) if low_confidence && inherent.rank > residual.rank => Some(FallbackRef {
-            from: residual,
-            to: inherent,
-            threshold,
-        }),
+        Some((threshold, needed_by)) if low_confidence && inherent.rank > residual.rank => {
+            Some(FallbackRef {
+                from: residual,
+                to: inherent,
+                threshold,
+                needed_by,
+            })
+        }
         _ => None,
     };
     Ok(Banded {
@@ -796,8 +827,9 @@ fn suggest(
             from: f.from.id.clone(),
             to: f.to.id.clone(),
             reason: format!(
-                "confidence {confidence:?} is below `{}`'s min_confidence {:?}",
-                f.from.id, f.threshold
+                "confidence {confidence:?} is below `{}`'s min_confidence {:?}, \
+                 needed to claim `{}` → `{}`",
+                f.needed_by.id, f.threshold, f.to.id, f.from.id
             ),
         }),
         status,

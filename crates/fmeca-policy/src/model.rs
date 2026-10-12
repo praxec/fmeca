@@ -77,8 +77,11 @@ pub struct Band {
     /// Leaving a failure mode in this band without action needs a rationale.
     #[serde(default)]
     pub no_action_needs_rationale: bool,
-    /// A residual counts in this band only at or above this confidence;
-    /// below it, the inherent band applies.
+    /// The evidence needed to claim a residual in this band, or a reduction
+    /// out of it: a residual counts only when its confidence reaches the
+    /// highest `min_confidence` of its own band and of every band between it
+    /// and the inherent band (inclusive); below that, the inherent band
+    /// applies.
     pub min_confidence: Option<Confidence>,
     /// Suggested role to accept a risk left in this band.
     pub acceptance: Option<String>,

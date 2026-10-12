@@ -307,8 +307,25 @@ fn declared_only_mitigation_falls_back_to_inherent_band() {
     assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
 }
 
+/// `review` → `act` leaves `review`, so the threshold is `review`'s C2 (0.2
+/// final review ruling), not `act`'s C1; a commit (C2) is exactly at it.
 #[test]
 fn fallback_absent_at_threshold() {
+    let s = eval(vec![mitigated(
+        fm("fm1", 3, 3),
+        mitigation(
+            "m1",
+            MitigationKind::Prevention,
+            (1, 3),
+            vec![evidence(EvidenceKind::Commit, None)],
+        ),
+    )]);
+    assert!(s.failure_modes[0].fallback.is_none());
+}
+
+#[test]
+fn leaving_a_band_needs_that_bands_confidence() {
+    // `review` → `act` at C1: `act`'s own C1 is met, `review`'s C2 is not.
     let s = eval(vec![mitigated(
         fm("fm1", 3, 3),
         mitigation(
@@ -318,7 +335,7 @@ fn fallback_absent_at_threshold() {
             vec![evidence(EvidenceKind::File, None)],
         ),
     )]);
-    assert!(s.failure_modes[0].fallback.is_none());
+    assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
 }
 
 // --- dispositions ------------------------------------------------------------
