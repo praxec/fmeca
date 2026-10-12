@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: dtolnay/rust-toolchain@1.120.0
         with:
           components: rustfmt, clippy
       - run: cargo fmt --all -- --check
@@ -22,7 +22,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: dtolnay/rust-toolchain@1.120.0
       - run: cargo test --workspace
   test:
     needs: [test-matrix]
@@ -41,7 +41,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: dtolnay/rust-toolchain@1.120.0
       - run: cargo doc --no-deps --locked --workspace
         env: { RUSTDOCFLAGS: "-D warnings" }
   package:
@@ -49,7 +49,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: dtolnay/rust-toolchain@1.120.0
       - run: cargo package --locked --list -p fmeca
       - run: cargo publish --dry-run --locked -p fmeca
       # `fmeca` 0.0.2 is not on crates.io yet, so a `fmeca-mcp` publish
@@ -97,7 +97,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: dtolnay/rust-toolchain@1.120.0
       - name: fmeca kernel has no network deps
         shell: bash
         run: |
@@ -129,7 +129,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: dtolnay/rust-toolchain@1.120.0
         with:
           targets: ${{ matrix.target }}
       - run: cargo build --locked --release -p fmeca-mcp --bin fmeca-mcp --target ${{ matrix.target }}
@@ -146,7 +146,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: dtolnay/rust-toolchain@1.120.0
       - run: cargo build -p fmeca-mcp
       # With an empty skills/ this asserts exit 0 and idempotent output only;
       # once skills/ holds skills it asserts their files too.
@@ -164,7 +164,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: dtolnay/rust-toolchain@1.120.0
       - run: cargo build -p fmeca-mcp
       - name: release wiring and MCP tool surface
         run: bash scripts/junior-contract-check.sh target/debug/fmeca-mcp
