@@ -90,10 +90,11 @@ The smoke script uses only Node builtins, makes no API calls, and sends the
 
 Jev's evaluation path talks to OpenRouter and is therefore ignored by default.
 To run it live (this spends money and needs a real key), export the key and opt
-in explicitly:
+in explicitly. The `vet` tests, the live one included, compile only with the
+`test-fakes` feature:
 
 ```sh
-OPENROUTER_API_KEY=… cargo test -p fmeca-mcp -- --ignored
+OPENROUTER_API_KEY=… cargo test -p fmeca-mcp --features test-fakes -- --ignored
 ```
 
 Never commit a key or paste one into an issue.

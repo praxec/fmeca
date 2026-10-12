@@ -13,6 +13,8 @@ jobs:
           components: rustfmt, clippy
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      # The vet tests and the fake judge compile only with test-fakes.
+      - run: cargo clippy -p fmeca-mcp --all-targets --features test-fakes -- -D warnings
   test-matrix:
     name: test (${{ matrix.os }})
     strategy:
@@ -23,7 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.0
-      - run: cargo test --workspace
+      # test-fakes compiles the vet tests (FakeJudge; no network).
+      - run: cargo test --workspace --features fmeca-mcp/test-fakes
   test:
     needs: [test-matrix]
     if: always()
@@ -52,19 +55,40 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99.0
       - run: cargo package --locked --list -p fmeca
       - run: cargo publish --dry-run --locked -p fmeca
-      # `fmeca` 0.0.2 is not on crates.io yet, so a `fmeca-mcp` publish
+      # `fmeca` 0.1.0 is not on crates.io yet, so a `fmeca-mcp` publish
       # dry-run cannot resolve it (cargo 1.99 resolves during packaging even
-      # with `--no-verify`). Task 3's resolution: verify fmeca-mcp packaging
-      # with `package --list`; #26 restores the full publish dry-run after
-      # `fmeca` is published.
+      # with `--no-verify`). Until then, verify fmeca-mcp packaging with
+      # `package --list`; once `fmeca` 0.1.0 is published, restore
+      # `cargo publish --dry-run --locked -p fmeca-mcp --allow-dirty` here
+      # (docs/releasing.md, step 7).
       # build.rs embeds $CARGO_MANIFEST_DIR/skills when present, and the packaged
       # crate cannot reach ../../skills, so copy the workspace skills in first
       # (the copy is gitignored).
       - name: copy skills into the fmeca-mcp package
         run: |
           if [ -d skills ]; then cp -R skills crates/fmeca-mcp/skills; fi
+      # `--allow-dirty` must only cover the copied skills: fail on any other
+      # uncommitted or untracked change.
+      - name: only the copied skills are dirty
+        shell: bash
+        run: |
+          set -euo pipefail
+          dirty="$(git status --porcelain --untracked-files=all | grep -v ' crates/fmeca-mcp/skills/' || true)"
+          if [ -n "$dirty" ]; then
+            printf '%s\n' "$dirty"
+            echo "::error::the working tree has changes besides crates/fmeca-mcp/skills/"
+            exit 1
+          fi
       # skills/ is copied in as a generated packaging input (gitignored); see build.rs
       - run: cargo package --locked --list -p fmeca-mcp --allow-dirty
+  # Builds the Dockerfile the release image job uses, so a broken image build
+  # fails a PR rather than a release. amd64 only; nothing is pushed.
+  docker:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build .
   npm:
     name: npm launcher (${{ matrix.os }})
     strategy:
