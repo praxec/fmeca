@@ -2,6 +2,7 @@
 name = "fmeca-policy"
 version.workspace = true
 edition.workspace = true
+rust-version = "1.89"
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
