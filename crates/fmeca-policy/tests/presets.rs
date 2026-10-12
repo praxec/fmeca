@@ -15,9 +15,10 @@ use fmeca::{
 };
 use fmeca_policy::presets::{PRESET_NAMES, builtin_actions, preset, resolve};
 use fmeca_policy::{
-    Accepted, Conditions, Confidence, Date, KernelGate, LoadedPolicy, PolicyError, PolicySource,
-    STANDARD_BAND_COUNT, Subject, SubjectFm, SubjectMitigation, Suggestions, evaluate, parse_date,
-    parse_policy, policy_hash, subject_from_analysis, subject_from_state, validate,
+    Accepted, Conditions, Confidence, Date, EvidenceMode, KernelGate, LoadedPolicy, PolicyError,
+    PolicySource, STANDARD_BAND_COUNT, Subject, SubjectFm, SubjectMitigation, Suggestions,
+    evaluate, parse_date, parse_policy, policy_hash, subject_from_analysis, subject_from_state,
+    validate,
 };
 
 fn as_of() -> Date {
@@ -755,11 +756,10 @@ fn kernel_gate_keeps_hygiene_blockers() {
     );
 }
 
-// --- the fallback threshold is monotone in the claimed reduction (C2) --------
+// --- evidence modes: the fallback threshold (C2) ------------------------------
 
-/// The first 5×5 cell (row order) of `band` in `preset_name`.
-fn cell_of(preset_name: &str, band: &str) -> (u8, u8) {
-    let loaded = preset(preset_name).expect("preset");
+/// The first 5×5 cell (row order) of `band` in `loaded`.
+fn cell_of(loaded: &LoadedPolicy, band: &str) -> (u8, u8) {
     let cells = &loaded.policy.matrices["nasa8004_5x5"].cells;
     cells
         .iter()
@@ -784,12 +784,39 @@ fn evidence_at(confidence: Confidence) -> Vec<ResolutionEvidence> {
     }
 }
 
+/// `preset_name` with its `evidence_mode` set to `mode` (and re-hashed).
+fn preset_in(preset_name: &str, mode: EvidenceMode) -> LoadedPolicy {
+    let mut loaded = preset(preset_name).expect("preset");
+    loaded.policy.evidence_mode = mode;
+    loaded.hash = policy_hash(&loaded.policy);
+    loaded
+}
+
 /// One failure mode with inherent `from` and an implemented prevention
 /// claiming `to`, its evidence at `confidence`, evaluated under `preset_name`
-/// on the 5×5 strategy.
+/// (default evidence mode) on the 5×5 strategy.
 fn claimed(preset_name: &str, from: &str, to: &str, confidence: Confidence) -> Suggestions {
-    let mut fm = open_fm("fm1", Domain::Runtime, false, cell_of(preset_name, from));
-    let residual = cell_of(preset_name, to);
+    claimed_in(&preset(preset_name).expect("preset"), from, to, confidence)
+}
+
+/// [`claimed`] under an already-loaded policy (e.g. one from [`preset_in`]).
+fn claimed_in(loaded: &LoadedPolicy, from: &str, to: &str, confidence: Confidence) -> Suggestions {
+    claimed_cells(
+        loaded,
+        cell_of(loaded, from),
+        cell_of(loaded, to),
+        confidence,
+    )
+}
+
+/// [`claimed_in`] with the inherent and residual 5×5 cells given directly.
+fn claimed_cells(
+    loaded: &LoadedPolicy,
+    inherent: (u8, u8),
+    residual: (u8, u8),
+    confidence: Confidence,
+) -> Suggestions {
+    let mut fm = open_fm("fm1", Domain::Runtime, false, inherent);
     fm.residual = Some(residual);
     fm.mitigations.push(mitigation(
         "m1",
@@ -799,20 +826,86 @@ fn claimed(preset_name: &str, from: &str, to: &str, confidence: Confidence) -> S
         evidence_at(confidence),
     ));
     let subject = subject(MatrixStrategy::Nasa8004_5x5, None, vec![fm]);
-    evaluate(&subject, &preset(preset_name).expect("preset"), as_of()).unwrap()
+    evaluate(&subject, loaded, as_of()).unwrap()
 }
 
 #[test]
 fn claimed_reduction_to_lowest_band_needs_the_left_bands_evidence_under_standard() {
-    // Leaving `review` needs C2; C1 evidence falls back to `review`.
-    let s = claimed("standard", "review", "none", Confidence::C1);
+    // Strong mode: leaving `review` needs C2; C1 evidence falls back.
+    let strong = preset_in("standard", EvidenceMode::Strong);
+    let s = claimed_in(&strong, "review", "none", Confidence::C1);
     assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
 }
 
 #[test]
 fn claimed_reduction_to_lowest_band_needs_the_left_bands_evidence_under_safety_critical() {
-    // Leaving `high` needs C3; C2 evidence falls back to `high`.
-    let s = claimed("safety-critical", "high", "low", Confidence::C2);
+    // Strong mode: leaving `high` needs C3; C2 evidence falls back.
+    let strong = preset_in("safety-critical", EvidenceMode::Strong);
+    let s = claimed_in(&strong, "high", "low", Confidence::C2);
+    assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("high"));
+}
+
+#[test]
+fn standard_mode_reduction_to_lowest_band_needs_the_first_gated_band_left() {
+    // `none` sets no `min_confidence`, so `review` → `none` borrows
+    // `compensate`'s C1; C0 falls back.
+    let s = claimed("standard", "review", "none", Confidence::C0);
+    assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
+}
+
+#[test]
+fn standard_mode_reduction_with_first_gated_band_evidence_passes() {
+    // `review` → `none` at C1 meets the borrowed `compensate` C1.
+    let s = claimed("standard", "review", "none", Confidence::C1);
+    assert!(s.failure_modes[0].fallback.is_none());
+}
+
+#[test]
+fn strong_mode_requires_every_left_band_so_c1_falls_back_under_strong() {
+    let strong = preset_in("standard", EvidenceMode::Strong);
+    let s = claimed_in(&strong, "review", "none", Confidence::C1);
+    assert!(s.failure_modes[0].fallback.is_some());
+}
+
+#[test]
+fn strong_mode_requires_every_left_band_so_c1_counts_under_standard() {
+    let s = claimed("standard", "review", "none", Confidence::C1);
+    assert!(s.failure_modes[0].fallback.is_none());
+}
+
+#[test]
+fn confidence_view_standard_row_fallback_follows_its_own_evidence_mode() {
+    // `standard`'s `review` → `none` at C1 counts under the default mode;
+    // a strong-mode `confidence-view` makes the standard row fall back.
+    let standard = preset("standard").expect("standard preset");
+    let strong_view = preset_in("confidence-view", EvidenceMode::Strong);
+    let s = claimed_cells(
+        &strong_view,
+        cell_of(&standard, "review"),
+        cell_of(&standard, "none"),
+        Confidence::C1,
+    );
+    assert!(s.failure_modes[0].fallback.is_some());
+}
+
+#[test]
+fn standard_mode_partial_reduction_needs_only_the_residual_bands_evidence() {
+    // `review` → `compensate` at C1: `compensate`'s own C1 is the threshold.
+    let s = claimed("standard", "review", "compensate", Confidence::C1);
+    assert!(s.failure_modes[0].fallback.is_none());
+}
+
+#[test]
+fn standard_mode_partial_reduction_below_the_residual_bands_evidence_falls_back() {
+    let s = claimed("standard", "review", "compensate", Confidence::C0);
+    assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
+}
+
+#[test]
+fn safety_critical_unevidenced_full_reduction_falls_back_in_standard_mode() {
+    // `high` → `low` at C0: `low` sets no `min_confidence`, so it borrows
+    // `medium`'s C2, the nearest gated band above.
+    let s = claimed("safety-critical", "high", "low", Confidence::C0);
     assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("high"));
 }
 
@@ -823,8 +916,8 @@ fn full_reduction_with_sufficient_evidence_passes() {
 }
 
 /// The lowest confidence at which a claimed `from` → `to` reduction counts
-/// (no fallback); 5 when even C4 falls back.
-fn needed_confidence(preset_name: &str, from: &str, to: &str) -> usize {
+/// (no fallback) under `loaded`; 5 when even C4 falls back.
+fn needed_confidence(loaded: &LoadedPolicy, from: &str, to: &str) -> usize {
     const LADDER: [Confidence; 5] = [
         Confidence::C0,
         Confidence::C1,
@@ -835,27 +928,29 @@ fn needed_confidence(preset_name: &str, from: &str, to: &str) -> usize {
     LADDER
         .iter()
         .position(|&c| {
-            claimed(preset_name, from, to, c).failure_modes[0]
+            claimed_in(loaded, from, to, c).failure_modes[0]
                 .fallback
                 .is_none()
         })
         .unwrap_or(LADDER.len())
 }
 
-/// For every preset with its own S×P bands (`confidence-view` takes its
-/// fallback from `standard`), every inherent band and every pair of lower
-/// residual bands: the bigger claimed reduction never needs less evidence.
+/// Under strong mode, for every preset with its own S×P bands
+/// (`confidence-view` takes its fallback from `standard`), every inherent
+/// band and every pair of lower residual bands: the bigger claimed reduction
+/// never needs less evidence.
 #[test]
 fn fallback_threshold_is_monotone_in_claimed_reduction() {
     let mut violations = Vec::new();
     for name in PRESET_NAMES.iter().filter(|n| **n != "confidence-view") {
-        let mut bands = preset(name).expect("preset").policy.bands;
+        let strong = preset_in(name, EvidenceMode::Strong);
+        let mut bands = strong.policy.bands.clone();
         bands.sort_by_key(|b| b.rank);
         for (i, inherent) in bands.iter().enumerate() {
             for (j, bigger) in bands[..i].iter().enumerate() {
                 for smaller in &bands[j + 1..i] {
-                    let big = needed_confidence(name, &inherent.id, &bigger.id);
-                    let small = needed_confidence(name, &inherent.id, &smaller.id);
+                    let big = needed_confidence(&strong, &inherent.id, &bigger.id);
+                    let small = needed_confidence(&strong, &inherent.id, &smaller.id);
                     if big < small {
                         violations.push(format!(
                             "{name}: {} → {} needs C{big} < {} → {} needs C{small}",
@@ -1258,8 +1353,10 @@ fn golden_mixed() -> Subject {
         mitigations: Vec::new(),
     };
     // Worst cell claimed down to the best by an implemented prevention with
-    // commit evidence (C2): enough to leave `standard`'s `review` (C2), not
-    // `business-critical`'s `review` or `safety-critical`'s `high` (C3).
+    // commit evidence (C2). In the default (standard) evidence mode the
+    // ungated lowest band borrows the nearest gated band above it:
+    // `standard`'s `compensate` (C1), `business-critical`'s `compensate` (C2)
+    // and `safety-critical`'s `medium` (C2), so no preset falls back.
     let mut claimed = open_fm("fm-claimed", Domain::Runtime, false, (5, 5));
     claimed.residual = Some((1, 1));
     claimed.mitigations.push(mitigation(

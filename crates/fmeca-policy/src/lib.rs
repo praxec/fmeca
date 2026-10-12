@@ -44,8 +44,8 @@ pub use subject::{
 
 pub use load::{load_project_policy, valid_policy_name};
 pub use model::{
-    Action, Band, Conditions, Confidence, DispositionKind, Matrix, Policy, Precedence,
-    SCHEMA_VERSION, Signoff,
+    Action, Band, Conditions, Confidence, DispositionKind, EvidenceMode, Matrix, Policy,
+    Precedence, SCHEMA_VERSION, Signoff,
 };
 pub use presets::{PRESET_NAMES, builtin_actions, preset, resolve};
 pub use validate::{STANDARD_BAND_COUNT, parse_days, validate};

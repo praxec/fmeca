@@ -274,208 +274,15 @@
       "id": "fm-claimed",
       "inherent_band": "review",
       "residual_band": "none",
-      "effective_band": "review",
+      "effective_band": "none",
       "confidence": "C2",
-      "fallback": {
-        "from": "none",
-        "to": "review",
-        "reason": "confidence C2 is below `review`'s min_confidence C3, needed to claim `review` → `none`"
-      },
+      "fallback": null,
       "status": {
         "state": "open",
-        "suggested": "research"
+        "suggested": "close"
       },
       "rationale_needed": false,
-      "actions": [
-        {
-          "id": "design-review",
-          "text": "Hold a design review of this failure mode with a second engineer",
-          "tags": [
-            "review",
-            "design"
-          ],
-          "precedence": "eliminate",
-          "required": true,
-          "why": [
-            "band review ≥ review",
-            "required: band review ≥ review"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "capacity-headroom-review",
-          "text": "Review capacity headroom and saturation limits on this path",
-          "tags": [
-            "ops",
-            "review"
-          ],
-          "precedence": "prevent",
-          "required": false,
-          "why": [
-            "band review rank 2 ≥ 1",
-            "domain runtime"
-          ],
-          "covered_by": [
-            "m1"
-          ]
-        },
-        {
-          "id": "idempotency-retry-backoff",
-          "text": "Make the operation idempotent and retry with backoff",
-          "tags": [
-            "design",
-            "ops"
-          ],
-          "precedence": "prevent",
-          "required": false,
-          "why": [
-            "band review rank 2 ≥ 1",
-            "domain runtime"
-          ],
-          "covered_by": [
-            "m1"
-          ]
-        },
-        {
-          "id": "input-validation-boundary",
-          "text": "Validate and reject input at the system boundary",
-          "tags": [
-            "design",
-            "security"
-          ],
-          "precedence": "prevent",
-          "required": false,
-          "why": [
-            "band review rank 2 ≥ 1",
-            "domain runtime"
-          ],
-          "covered_by": [
-            "m1"
-          ]
-        },
-        {
-          "id": "prevention-before-detection",
-          "text": "Prevent the failure by design before adding detection on a review-band risk",
-          "tags": [
-            "design",
-            "process"
-          ],
-          "precedence": "prevent",
-          "required": false,
-          "why": [
-            "band review ≥ review"
-          ],
-          "covered_by": [
-            "m1"
-          ]
-        },
-        {
-          "id": "alert-leading-indicator",
-          "text": "Alert on the leading indicator of this failure before users notice it",
-          "tags": [
-            "ops"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "band review rank 2 ≥ 1",
-            "domain runtime",
-            "no implemented detection mitigation"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "fault-injection-test",
-          "text": "Add a fault-injection test that forces this failure mode and checks the response",
-          "tags": [
-            "test"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "band review rank 2 ≥ 1",
-            "domain runtime",
-            "confidence C2 < C3"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "load-test",
-          "text": "Add or extend a load test covering this failure mode",
-          "tags": [
-            "test",
-            "ops"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "band review rank 2 ≥ 2",
-            "domain runtime",
-            "confidence C2 < C3"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "slo-error-budget",
-          "text": "Express the guard as an SLO with an error budget",
-          "tags": [
-            "ops",
-            "process"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "band review rank 2 ≥ 2",
-            "domain runtime"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "backup-restore-test",
-          "text": "Rehearse backup and restore for the affected data",
-          "tags": [
-            "ops",
-            "test"
-          ],
-          "precedence": "contain",
-          "required": false,
-          "why": [
-            "band review rank 2 ≥ 2",
-            "domain runtime"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "feature-flag-staged-rollout",
-          "text": "Put the change behind a feature flag and roll out in stages",
-          "tags": [
-            "ops",
-            "design"
-          ],
-          "precedence": "contain",
-          "required": false,
-          "why": [
-            "band review rank 2 ≥ 1",
-            "domain runtime"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "documented-runbook",
-          "text": "Write the runbook for responding to this failure, with its verification steps",
-          "tags": [
-            "docs",
-            "ops"
-          ],
-          "precedence": "procedure",
-          "required": false,
-          "why": [
-            "band review rank 2 ≥ 2",
-            "domain runtime"
-          ],
-          "covered_by": []
-        }
-      ]
+      "actions": []
     },
     {
       "id": "fm-unscored",
@@ -500,7 +307,8 @@
   ],
   "rollups": {
     "by_band": {
-      "review": 2,
+      "none": 1,
+      "review": 1,
       "unscored": 1
     },
     "by_confidence": {
@@ -520,10 +328,6 @@
       [
         "fm-acc",
         "prevention-before-detection"
-      ],
-      [
-        "fm-claimed",
-        "design-review"
       ]
     ],
     "accepted_by_role": {
@@ -532,9 +336,7 @@
     "review_overdue": [
       "fm-acc"
     ],
-    "fallbacks": [
-      "fm-claimed"
-    ]
+    "fallbacks": []
   },
   "signoff": {
     "pass": false,
@@ -542,8 +344,6 @@
       "fm-acc: accepted risk in band `review` is overdue for review",
       "fm-acc: required action `design-review` is not covered",
       "fm-acc: required action `prevention-before-detection` is not covered",
-      "fm-claimed: effective band `review` ranks above max_residual_band `compensate`",
-      "fm-claimed: required action `design-review` is not covered",
       "fm-unscored: unscored",
       "kernel: CLARIFY: failure mode 'fm-unscored' is missing cause/effect/score"
     ]
