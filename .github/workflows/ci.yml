@@ -7,7 +7,7 @@ jobs:
   lint:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.0
         with:
           components: rustfmt, clippy
@@ -21,7 +21,7 @@ jobs:
         os: [ubuntu-22.04, macos-15, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.0
       - run: cargo test --workspace
   test:
@@ -34,13 +34,13 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
   docs:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.0
       - run: cargo doc --no-deps --locked --workspace
         env: { RUSTDOCFLAGS: "-D warnings" }
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.0
       - run: cargo package --locked --list -p fmeca
       - run: cargo publish --dry-run --locked -p fmeca
@@ -74,7 +74,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -96,7 +96,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.0
       - name: fmeca kernel has no network deps
         shell: bash
@@ -128,7 +128,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.0
         with:
           targets: ${{ matrix.target }}
@@ -145,7 +145,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.0
       - run: cargo build -p fmeca-mcp
       # With an empty skills/ this asserts exit 0 and idempotent output only;
@@ -156,14 +156,14 @@ jobs:
     name: version sync
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: every version field agrees with Cargo.toml
         run: bash scripts/check-version-sync.sh
   junior-contract:
     name: junior contract
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.0
       - run: cargo build -p fmeca-mcp
       - name: release wiring and MCP tool surface
