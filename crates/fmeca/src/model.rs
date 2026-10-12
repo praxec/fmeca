@@ -287,8 +287,10 @@ pub enum EvidenceKind {
     Note,
 }
 
-/// One piece of evidence for a status or disposition change.
+/// One piece of evidence for a status or disposition change. Unknown keys are
+/// rejected, so a misspelled `basis` fails instead of being dropped.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ResolutionEvidence {
     pub kind: EvidenceKind,
     pub reference: String,

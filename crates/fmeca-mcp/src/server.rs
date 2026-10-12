@@ -958,7 +958,8 @@ fn evidence_schema() -> Value {
                     "enum": ["design", "test", "inspection", "failure_history", "operational_use"]
                 }
             },
-            "required": ["kind", "reference"]
+            "required": ["kind", "reference"],
+            "additionalProperties": false
         }
     })
 }
