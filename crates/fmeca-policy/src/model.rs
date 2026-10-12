@@ -62,6 +62,32 @@ pub enum Precedence {
     Procedure,
 }
 
+/// How much evidence a claimed reduction needs before its residual band
+/// counts (spec §4.4; 0.2 maintainer ruling: strong evidence is an opt-in
+/// mode). Below the required confidence the inherent band applies.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceMode {
+    /// The default: the highest of the residual band's own `min_confidence`
+    /// and, for a reduction, the `min_confidence` of the nearest band above
+    /// the residual (at or below the inherent band) that sets one. Leaving a
+    /// band needs at least the evidence of the first gated band left.
+    #[default]
+    Standard,
+    /// Opt-in: the highest `min_confidence` over the residual band and every
+    /// band ranked above it, up to and including the inherent band. Monotone:
+    /// a bigger claimed reduction never needs less evidence.
+    Strong,
+}
+
+impl EvidenceMode {
+    /// True for the default mode (omitted from the canonical JSON, so the
+    /// hash of a policy without the key is unchanged).
+    pub fn is_standard(&self) -> bool {
+        *self == EvidenceMode::Standard
+    }
+}
+
 /// A risk band: a named rung of the policy's risk ladder.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -78,9 +104,8 @@ pub struct Band {
     #[serde(default)]
     pub no_action_needs_rationale: bool,
     /// The evidence needed to claim a residual in this band, or a reduction
-    /// out of it: a residual counts only when its confidence reaches the
-    /// highest `min_confidence` of its own band and of every band between it
-    /// and the inherent band (inclusive); below that, the inherent band
+    /// out of it; how the bands of a claim combine is the policy's
+    /// [`EvidenceMode`]. Below the required confidence, the inherent band
     /// applies.
     pub min_confidence: Option<Confidence>,
     /// Suggested role to accept a risk left in this band.
@@ -225,4 +250,7 @@ pub struct Policy {
     /// Also suggest the crate's built-in actions.
     #[serde(default)]
     pub include_builtin_actions: bool,
+    /// How much evidence a claimed reduction needs (default `standard`).
+    #[serde(default, skip_serializing_if = "EvidenceMode::is_standard")]
+    pub evidence_mode: EvidenceMode,
 }

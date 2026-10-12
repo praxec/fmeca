@@ -19,6 +19,11 @@ schema = 1
 # Also suggest fmeca's built-in action catalog (merged at query time; your own
 # actions with the same id win).
 include_builtin_actions = true
+# How much evidence a claimed reduction needs before its residual band counts.
+# Default "standard": the residual band's own min_confidence and that of the
+# first gated band the claim leaves. "strong" needs the min_confidence of every
+# band the claim leaves (e.g. for regulated or safety-critical work).
+# evidence_mode = "strong"
 
 # --- bands: the risk ladder, rank 0 = best. Ids and ranks are unique. -------
 

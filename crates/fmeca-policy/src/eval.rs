@@ -18,13 +18,16 @@
 //!    kernel's rule applies and the residual is the inherent band.
 //! 3. **Confidence**: [`residual_confidence`].
 //! 4. **Effective band**: the residual band, unless the confidence is below
-//!    the required confidence — the highest `min_confidence` over the
-//!    residual band and every band the claimed reduction leaves (ranked
-//!    above the residual band, at or below the inherent band); then the
-//!    inherent band, reported as a [`Fallback`]. Claiming to leave a band
-//!    needs that band's evidence, so the threshold is monotone in the
-//!    claimed reduction. A fallback only ever raises the band: it applies
-//!    when the inherent band ranks above the residual band.
+//!    the required confidence ([`required_confidence`], set by the policy's
+//!    [`EvidenceMode`]); then the inherent band, reported as a [`Fallback`].
+//!    Under `standard` (the default) the required confidence is the highest
+//!    of the residual band's own `min_confidence` and, for a reduction, that
+//!    of the nearest band above the residual that sets one: leaving a band
+//!    needs at least the evidence of the first gated band left. Under
+//!    `strong` it is the highest `min_confidence` over the residual band and
+//!    every band the claimed reduction leaves, so the threshold is monotone
+//!    in the claimed reduction. A fallback only ever raises the band: it
+//!    applies when the inherent band ranks above the residual band.
 //! 5. **Disposition**: accepted (with review status), or a suggested
 //!    disposition for an open failure mode; `rationale_needed`.
 //! 6. **Actions**: the catalog actions whose `applies_when` holds, sorted by
@@ -42,7 +45,8 @@
 //!
 //! A policy with a `confidence` matrix maps (standard band rank, confidence)
 //! to its own band. The standard band is the effective band computed under
-//! the built-in `standard` preset; [`evaluate`] supplies it through the
+//! the built-in `standard` preset's bands, with the evaluated policy's own
+//! [`EvidenceMode`]; [`evaluate`] supplies the preset through the
 //! crate-private [`evaluate_with`] hook, together with the built-in action
 //! catalog.
 
@@ -53,7 +57,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::confidence::residual_confidence;
 use crate::model::{
-    Action, Band, Conditions, Confidence, DispositionKind, Matrix, Policy, Precedence,
+    Action, Band, Conditions, Confidence, DispositionKind, EvidenceMode, Matrix, Policy, Precedence,
 };
 use crate::subject::{Subject, SubjectFm};
 use crate::{LoadedPolicy, PolicyError, PolicySource, invalid, parse_days};
@@ -449,10 +453,13 @@ pub(crate) fn evaluate_with(
             continue;
         }
         let confidence = residual_confidence(fm);
-        let own = bands(policy, sxp, fm, confidence)?;
+        let mode = policy.evidence_mode;
+        let own = bands(policy, sxp, fm, confidence, mode)?;
         let banded = match confidence_view {
             Some((matrix, standard, standard_sxp)) => {
-                let std = bands(standard, standard_sxp, fm, confidence)?;
+                // The standard row's fallback follows this policy's own
+                // evidence mode, not the `standard` preset's.
+                let std = bands(standard, standard_sxp, fm, confidence, mode)?;
                 let effective = match std.effective {
                     Some(b) => Some(confidence_cell(policy, standard, matrix, b, confidence)?),
                     None => None,
@@ -676,32 +683,55 @@ struct FallbackRef<'p> {
     needed_by: &'p Band,
 }
 
-/// The confidence a residual needs to count (rule 4; 0.2 final review
-/// ruling): the highest `min_confidence` over the residual band itself and
-/// every band the claimed reduction leaves — those ranked above the residual
-/// band and at or below the inherent band — with the band that sets it
-/// (the highest-ranked on a tie). Claiming to leave a band needs that band's
-/// evidence, so a bigger claimed reduction never needs less. `None` when none
-/// of those bands sets a `min_confidence`.
+/// The confidence a residual needs to count (rule 4), with the band that
+/// sets it (the highest-ranked on a tie); `None` when no considered band
+/// sets a `min_confidence`. The bands considered depend on `mode` (0.2
+/// maintainer ruling: strong evidence is an opt-in mode):
+///
+/// - [`EvidenceMode::Standard`]: the residual band itself and, for a
+///   reduction (inherent ranked above residual), the nearest band above the
+///   residual — the lowest rank above it, at or below the inherent band —
+///   that sets a `min_confidence`. Leaving a band needs at least the
+///   evidence of the first gated band left, so a claim to the lowest band is
+///   never free while a band above it is gated.
+/// - [`EvidenceMode::Strong`]: the residual band itself and every band the
+///   claimed reduction leaves (ranked above the residual band, at or below
+///   the inherent band). A bigger claimed reduction never needs less.
 fn required_confidence<'p>(
     policy: &'p Policy,
     inherent: &Band,
     residual: &'p Band,
+    mode: EvidenceMode,
 ) -> Option<(Confidence, &'p Band)> {
-    policy
-        .bands
-        .iter()
-        .filter(|b| b.id == residual.id || (b.rank > residual.rank && b.rank <= inherent.rank))
-        .filter_map(|b| b.min_confidence.map(|m| (m, b)))
+    let left = |b: &&'p Band| b.rank > residual.rank && b.rank <= inherent.rank;
+    let gate = |b: &'p Band| b.min_confidence.map(|m| (m, b));
+    let own = gate(residual);
+    let above = match mode {
+        EvidenceMode::Standard => policy
+            .bands
+            .iter()
+            .filter(left)
+            .filter_map(gate)
+            .min_by_key(|(_, b)| b.rank),
+        EvidenceMode::Strong => policy
+            .bands
+            .iter()
+            .filter(left)
+            .filter_map(gate)
+            .max_by_key(|(m, b)| (*m, b.rank)),
+    };
+    own.into_iter()
+        .chain(above)
         .max_by_key(|(m, b)| (*m, b.rank))
 }
 
-/// Rules 1, 2 and 4 under `policy`'s S×P `matrix`.
+/// Rules 1, 2 and 4 under `policy`'s S×P `matrix` and evidence `mode`.
 fn bands<'p>(
     policy: &'p Policy,
     matrix: &Matrix,
     fm: &SubjectFm,
     confidence: Confidence,
+    mode: EvidenceMode,
 ) -> Result<Banded<'p>, PolicyError> {
     let Some(inherent_cell) = fm.inherent else {
         return Ok(Banded {
@@ -717,7 +747,8 @@ fn bands<'p>(
         Some(cell) => sxp_cell(policy, matrix, cell)?,
         None => inherent,
     };
-    let required = required_confidence(policy, inherent, residual).filter(|r| confidence < r.0);
+    let required =
+        required_confidence(policy, inherent, residual, mode).filter(|r| confidence < r.0);
     let low_confidence = fm.residual.is_some() && required.is_some();
     let fallback = match required {
         // Fall back only to a worse inherent band: low confidence never

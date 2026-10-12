@@ -307,8 +307,9 @@ fn declared_only_mitigation_falls_back_to_inherent_band() {
     assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
 }
 
-/// `review` → `act` leaves `review`, so the threshold is `review`'s C2 (0.2
-/// final review ruling), not `act`'s C1; a commit (C2) is exactly at it.
+/// `review` → `act` leaves `review`, so the threshold is `review`'s C2 (the
+/// first gated band left, in either evidence mode), not `act`'s C1; a
+/// commit (C2) is exactly at it.
 #[test]
 fn fallback_absent_at_threshold() {
     let s = eval(vec![mitigated(

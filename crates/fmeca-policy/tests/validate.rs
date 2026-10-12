@@ -1,6 +1,6 @@
 //! Parsing, validation and hashing of policy documents (spec §3).
 
-use fmeca_policy::{PolicyError, parse_policy, policy_hash, validate};
+use fmeca_policy::{EvidenceMode, PolicyError, parse_policy, policy_hash, validate};
 
 /// Two bands (`none` rank 0, `act` rank 1), a 3×3 matrix all `none` except
 /// the bottom-right `act`, and sign-off at `none`.
@@ -59,6 +59,39 @@ fn unknown_key_is_rejected() {
     assert_eq!(
         invalid_field(check(&text)).as_deref(),
         Some("bands[1].colour")
+    );
+}
+
+#[test]
+fn evidence_mode_defaults_to_standard() {
+    let policy = parse_policy(MINIMAL).unwrap();
+    assert_eq!(policy.evidence_mode, EvidenceMode::Standard);
+}
+
+#[test]
+fn strong_evidence_mode_parses() {
+    let text = MINIMAL.replace("schema = 1", "schema = 1\nevidence_mode = \"strong\"");
+    assert_eq!(
+        parse_policy(&text).map(|p| p.evidence_mode),
+        Ok(EvidenceMode::Strong)
+    );
+}
+
+#[test]
+fn unknown_evidence_mode_is_rejected() {
+    let text = MINIMAL.replace("schema = 1", "schema = 1\nevidence_mode = \"lenient\"");
+    assert_eq!(
+        invalid_field(check(&text)).as_deref(),
+        Some("evidence_mode")
+    );
+}
+
+#[test]
+fn explicit_standard_evidence_mode_keeps_the_hash_of_an_omitted_one() {
+    let text = MINIMAL.replace("schema = 1", "schema = 1\nevidence_mode = \"standard\"");
+    assert_eq!(
+        policy_hash(&parse_policy(&text).unwrap()),
+        policy_hash(&parse_policy(MINIMAL).unwrap())
     );
 }
 

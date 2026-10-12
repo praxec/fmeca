@@ -52,6 +52,9 @@ A policy has:
   `false`.
 - **`actions`** — optional policy-specific actions, plus the shared built-in
   catalog when `include_builtin_actions = true`.
+- **`evidence_mode`** — optional, `"standard"` (the default) or `"strong"`:
+  how much evidence a claimed reduction needs (see the fallback rule below).
+  No built-in preset sets it.
 
 Actions carry a `precedence` (MIL-STD-882E §4.3.4, adapted):
 `eliminate` → `prevent` → `detect` → `contain` → `procedure`. They are
@@ -106,15 +109,23 @@ under `unscored_fails` (every preset but `compat-0.1`), fails sign-off as
 ## Fallback rule (MIL-STD-882E Table VI)
 
 A residual counts only when its confidence reaches the **required
-confidence**: the highest `min_confidence` over the residual band itself
-**and every band the claimed reduction leaves** — the bands ranked above the
-residual band and at or below the inherent band. Claiming to leave a band
-needs that band's evidence, so a bigger claimed reduction never needs less
-evidence, and a reduction to a lowest band that sets no `min_confidence` of
-its own still needs the evidence of the bands it leaves. (Under
-`safety-critical`, a mitigation claiming `high` → `low` needs C3, the
-`min_confidence` of `serious` and `high`; under `standard`, `review` →
-`none` needs C2.)
+confidence**, which the policy's `evidence_mode` sets:
+
+- **`standard`** (the default): the higher of the residual band's own
+  `min_confidence` and, for a claimed reduction, the `min_confidence` of the
+  **first gated band it leaves** — the lowest-ranked band above the residual,
+  at or below the inherent band, that sets one. A reduction to a lowest band
+  is never free while a band above it is gated. Under `standard`, `review` →
+  `none` needs C1 (`compensate`'s), and `review` → `compensate` needs C2
+  (`review`'s); under `safety-critical`, `high` → `low` needs C2
+  (`medium`'s).
+- **`strong`** (opt-in, `evidence_mode = "strong"`): the highest
+  `min_confidence` over the residual band and **every band the claimed
+  reduction leaves**. Claiming to leave a band needs that band's evidence, so
+  a bigger claimed reduction never needs less evidence: `review` → `none`
+  needs C2 under `standard`'s bands, and `high` → `low` needs C3 under
+  `safety-critical`'s. Choose it in regulated or safety contexts, where a
+  claim to have left the worst band should carry the worst band's evidence.
 
 When the confidence is below the required confidence, the **inherent** band
 is effective instead, and the result carries `fallback {from, to, reason}`;
@@ -123,9 +134,11 @@ fallback only ever raises the band: low confidence never lowers a residual,
 and a fallback is only reported when the inherent band ranks above the
 residual band.
 
-Under `confidence-view`, the fallback is computed under the `standard` preset,
-so `fallback {from, to}` name **standard's** bands (`none` / `compensate` /
-`review`), not `confidence-view`'s own.
+Under `confidence-view`, the fallback is computed with the `standard`
+preset's bands, so `fallback {from, to}` name **standard's** bands (`none` /
+`compensate` / `review`), not `confidence-view`'s own. It uses the evaluated
+policy's own `evidence_mode`: a copy of `confidence-view` with
+`evidence_mode = "strong"` gets the strong rule on standard's bands.
 
 ## One-shot analysis input
 

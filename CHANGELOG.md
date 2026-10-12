@@ -23,9 +23,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Kernel gate in sign-off: `include_kernel_gate` adds the kernel's hygiene
   blockers (CLARIFY, weak mitigation order, EMPTY) but never its RESIDUAL
   zone blockers, so `max_residual_band` decides which residuals pass.
-- Fallback threshold: a residual needs the highest `min_confidence` of its
-  own band and of every band the claimed reduction leaves, so a bigger claimed
-  reduction never needs less evidence (provisional maintainer ruling).
+- Fallback threshold and `evidence_mode` (maintainer ruling): by default
+  (`evidence_mode = "standard"`) a residual needs the higher `min_confidence`
+  of its own band and of the first gated band the claimed reduction leaves, so
+  a claim to the lowest band is never free while a band above it is gated.
+  The opt-in `evidence_mode = "strong"` needs the highest `min_confidence` of
+  its own band and of every band the claimed reduction leaves, so a bigger
+  claimed reduction never needs less evidence. No preset sets `strong`.
 - `compat-0.1` sets `unscored_fails = false`, so an accepted, unscored failure
   mode passes as in 0.1 readiness, while an open one still fails (CLARIFY).
 - Docs: the `fmeca-policy` skill (with a complete `policy-template.toml`),
