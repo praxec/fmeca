@@ -20,10 +20,10 @@
 //! 4. **Effective band**: the residual band, unless the confidence is below
 //!    the required confidence ([`required_confidence`], set by the policy's
 //!    [`EvidenceMode`]); then the inherent band, reported as a [`Fallback`].
-//!    Under `standard` (the default) the required confidence is the highest
-//!    of the residual band's own `min_confidence` and, for a reduction, that
-//!    of the nearest band above the residual that sets one: leaving a band
-//!    needs at least the evidence of the first gated band left. Under
+//!    Under `standard` (the default) the required confidence is the
+//!    residual band's own `min_confidence`, or — only when it sets none and
+//!    the claim is a reduction — that of the nearest band above the residual
+//!    that sets one. Under
 //!    `strong` it is the highest `min_confidence` over the residual band and
 //!    every band the claimed reduction leaves, so the threshold is monotone
 //!    in the claimed reduction. A fallback only ever raises the band: it
@@ -688,12 +688,12 @@ struct FallbackRef<'p> {
 /// sets a `min_confidence`. The bands considered depend on `mode` (0.2
 /// maintainer ruling: strong evidence is an opt-in mode):
 ///
-/// - [`EvidenceMode::Standard`]: the residual band itself and, for a
-///   reduction (inherent ranked above residual), the nearest band above the
-///   residual — the lowest rank above it, at or below the inherent band —
-///   that sets a `min_confidence`. Leaving a band needs at least the
-///   evidence of the first gated band left, so a claim to the lowest band is
-///   never free while a band above it is gated.
+/// - [`EvidenceMode::Standard`]: the residual band's own `min_confidence`;
+///   only when it sets none and the claim is a reduction (inherent ranked
+///   above residual), that of the nearest band above the residual — the
+///   lowest rank above it, at or below the inherent band — that sets one. A
+///   claim to an ungated lowest band is never free while a band above it is
+///   gated.
 /// - [`EvidenceMode::Strong`]: the residual band itself and every band the
 ///   claimed reduction leaves (ranked above the residual band, at or below
 ///   the inherent band). A bigger claimed reduction never needs less.
@@ -706,23 +706,23 @@ fn required_confidence<'p>(
     let left = |b: &&'p Band| b.rank > residual.rank && b.rank <= inherent.rank;
     let gate = |b: &'p Band| b.min_confidence.map(|m| (m, b));
     let own = gate(residual);
-    let above = match mode {
-        EvidenceMode::Standard => policy
-            .bands
-            .iter()
-            .filter(left)
-            .filter_map(gate)
-            .min_by_key(|(_, b)| b.rank),
+    match mode {
+        EvidenceMode::Standard => own.or_else(|| {
+            policy
+                .bands
+                .iter()
+                .filter(left)
+                .filter_map(gate)
+                .min_by_key(|(_, b)| b.rank)
+        }),
         EvidenceMode::Strong => policy
             .bands
             .iter()
             .filter(left)
             .filter_map(gate)
+            .chain(own)
             .max_by_key(|(m, b)| (*m, b.rank)),
-    };
-    own.into_iter()
-        .chain(above)
-        .max_by_key(|(m, b)| (*m, b.rank))
+    }
 }
 
 /// Rules 1, 2 and 4 under `policy`'s S×P `matrix` and evidence `mode`.

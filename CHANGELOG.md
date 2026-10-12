@@ -24,9 +24,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   blockers (CLARIFY, weak mitigation order, EMPTY) but never its RESIDUAL
   zone blockers, so `max_residual_band` decides which residuals pass.
 - Fallback threshold and `evidence_mode` (maintainer ruling): by default
-  (`evidence_mode = "standard"`) a residual needs the higher `min_confidence`
-  of its own band and of the first gated band the claimed reduction leaves, so
-  a claim to the lowest band is never free while a band above it is gated.
+  (`evidence_mode = "standard"`) a residual needs its own band's
+  `min_confidence`; a band that sets none borrows the nearest gated band above
+  it on a claimed reduction, so a claim to the lowest band is never free while
+  a band above it is gated.
   The opt-in `evidence_mode = "strong"` needs the highest `min_confidence` of
   its own band and of every band the claimed reduction leaves, so a bigger
   claimed reduction never needs less evidence. No preset sets `strong`.

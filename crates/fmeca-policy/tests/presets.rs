@@ -847,14 +847,15 @@ fn claimed_reduction_to_lowest_band_needs_the_left_bands_evidence_under_safety_c
 
 #[test]
 fn standard_mode_reduction_to_lowest_band_needs_the_first_gated_band_left() {
-    // `review` → `none` at C0: below `compensate`'s C1, so it falls back.
+    // `none` sets no `min_confidence`, so `review` → `none` borrows
+    // `compensate`'s C1; C0 falls back.
     let s = claimed("standard", "review", "none", Confidence::C0);
     assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
 }
 
 #[test]
 fn standard_mode_reduction_with_first_gated_band_evidence_passes() {
-    // `review` → `none` at C1 meets `compensate`'s C1: no fallback.
+    // `review` → `none` at C1 meets the borrowed `compensate` C1.
     let s = claimed("standard", "review", "none", Confidence::C1);
     assert!(s.failure_modes[0].fallback.is_none());
 }
@@ -888,9 +889,22 @@ fn confidence_view_standard_row_fallback_follows_its_own_evidence_mode() {
 }
 
 #[test]
+fn standard_mode_partial_reduction_needs_only_the_residual_bands_evidence() {
+    // `review` → `compensate` at C1: `compensate`'s own C1 is the threshold.
+    let s = claimed("standard", "review", "compensate", Confidence::C1);
+    assert!(s.failure_modes[0].fallback.is_none());
+}
+
+#[test]
+fn standard_mode_partial_reduction_below_the_residual_bands_evidence_falls_back() {
+    let s = claimed("standard", "review", "compensate", Confidence::C0);
+    assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
+}
+
+#[test]
 fn safety_critical_unevidenced_full_reduction_falls_back_in_standard_mode() {
-    // `high` → `low` at C0: `low` sets no `min_confidence`, but `medium`
-    // (C2), the first gated band left, does.
+    // `high` → `low` at C0: `low` sets no `min_confidence`, so it borrows
+    // `medium`'s C2, the nearest gated band above.
     let s = claimed("safety-critical", "high", "low", Confidence::C0);
     assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("high"));
 }
@@ -1339,10 +1353,10 @@ fn golden_mixed() -> Subject {
         mitigations: Vec::new(),
     };
     // Worst cell claimed down to the best by an implemented prevention with
-    // commit evidence (C2). In the default (standard) evidence mode that
-    // meets the first gated band left: `standard`'s `compensate` (C1),
-    // `business-critical`'s `compensate` (C2) and `safety-critical`'s
-    // `medium` (C2), so no preset falls back.
+    // commit evidence (C2). In the default (standard) evidence mode the
+    // ungated lowest band borrows the nearest gated band above it:
+    // `standard`'s `compensate` (C1), `business-critical`'s `compensate` (C2)
+    // and `safety-critical`'s `medium` (C2), so no preset falls back.
     let mut claimed = open_fm("fm-claimed", Domain::Runtime, false, (5, 5));
     claimed.residual = Some((1, 1));
     claimed.mitigations.push(mitigation(

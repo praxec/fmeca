@@ -111,14 +111,15 @@ under `unscored_fails` (every preset but `compat-0.1`), fails sign-off as
 A residual counts only when its confidence reaches the **required
 confidence**, which the policy's `evidence_mode` sets:
 
-- **`standard`** (the default): the higher of the residual band's own
-  `min_confidence` and, for a claimed reduction, the `min_confidence` of the
-  **first gated band it leaves** — the lowest-ranked band above the residual,
-  at or below the inherent band, that sets one. A reduction to a lowest band
-  is never free while a band above it is gated. Under `standard`, `review` →
-  `none` needs C1 (`compensate`'s), and `review` → `compensate` needs C2
-  (`review`'s); under `safety-critical`, `high` → `low` needs C2
-  (`medium`'s).
+- **`standard`** (the default): the residual band's own `min_confidence`.
+  Only when the residual band sets none and the claim is a reduction, the
+  `min_confidence` of the **nearest gated band above it** — the lowest-ranked
+  band above the residual, at or below the inherent band, that sets one — so
+  a reduction to an ungated lowest band is never free while a band above it
+  is gated. Under `standard`, `review` → `compensate` needs C1
+  (`compensate`'s own) and `review` → `none` needs C1 (borrowed from
+  `compensate`); under `safety-critical`, `high` → `low` needs C2 (borrowed
+  from `medium`).
 - **`strong`** (opt-in, `evidence_mode = "strong"`): the highest
   `min_confidence` over the residual band and **every band the claimed
   reduction leaves**. Claiming to leave a band needs that band's evidence, so
@@ -126,6 +127,9 @@ confidence**, which the policy's `evidence_mode` sets:
   needs C2 under `standard`'s bands, and `high` → `low` needs C3 under
   `safety-critical`'s. Choose it in regulated or safety contexts, where a
   claim to have left the worst band should carry the worst band's evidence.
+
+For regulated or safety use, set `evidence_mode = "strong"` in a project
+policy: every built-in preset, `safety-critical` included, uses `standard`.
 
 When the confidence is below the required confidence, the **inherent** band
 is effective instead, and the result carries `fallback {from, to, reason}`;

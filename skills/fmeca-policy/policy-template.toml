@@ -20,9 +20,9 @@ schema = 1
 # actions with the same id win).
 include_builtin_actions = true
 # How much evidence a claimed reduction needs before its residual band counts.
-# Default "standard": the residual band's own min_confidence and that of the
-# first gated band the claim leaves. "strong" needs the min_confidence of every
-# band the claim leaves (e.g. for regulated or safety-critical work).
+# Default "standard": the residual band's own min_confidence (a band without
+# one borrows the nearest gated band above it). "strong" needs the
+# min_confidence of every band the claim leaves (regulated or safety work).
 # evidence_mode = "strong"
 
 # --- bands: the risk ladder, rank 0 = best. Ids and ranks are unique. -------

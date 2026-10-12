@@ -53,8 +53,8 @@ Read the result:
   (C0 declared only, up to C4 proven in use, from the mitigations' evidence); `fallback`;
   `status`; `rationale_needed`; `actions`.
 - `fallback`: when confidence is below the required minimum, the **inherent** band stands
-  in for the residual. The minimum is the higher `min_confidence` of the residual band and
-  of the first gated band the claimed reduction leaves, so a claim to the lowest band needs
+  in for the residual. The minimum is the residual band's `min_confidence`; a band that sets
+  none borrows the nearest gated band above it, so a claim to the lowest band needs
   evidence even when that band asks for none. It only ever raises the band.
   A policy with `evidence_mode = "strong"` needs the evidence of every band it leaves. The cure is evidence, not a rescore:
   move the mitigation with [fmeca-resolve](../fmeca-resolve/SKILL.md) and cite the test or

@@ -99,6 +99,11 @@ fn test_policy() -> LoadedPolicy {
     policy_from(TEST_POLICY)
 }
 
+/// [`TEST_POLICY`] with `evidence_mode = "strong"`.
+fn strong_test_policy() -> LoadedPolicy {
+    policy_from(&TEST_POLICY.replace("schema = 1", "schema = 1\nevidence_mode = \"strong\""))
+}
+
 fn as_of() -> Date {
     parse_date("2026-10-12").unwrap()
 }
@@ -174,6 +179,10 @@ fn subject(failure_modes: Vec<SubjectFm>) -> Subject {
 
 fn eval(failure_modes: Vec<SubjectFm>) -> Suggestions {
     evaluate(&subject(failure_modes), &test_policy(), as_of()).unwrap()
+}
+
+fn eval_strong(failure_modes: Vec<SubjectFm>) -> Suggestions {
+    evaluate(&subject(failure_modes), &strong_test_policy(), as_of()).unwrap()
 }
 
 fn confidence_of(evidence: Vec<ResolutionEvidence>) -> Confidence {
@@ -307,12 +316,11 @@ fn declared_only_mitigation_falls_back_to_inherent_band() {
     assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
 }
 
-/// `review` → `act` leaves `review`, so the threshold is `review`'s C2 (the
-/// first gated band left, in either evidence mode), not `act`'s C1; a
-/// commit (C2) is exactly at it.
+/// Under strong mode, `review` → `act` leaves `review`, so the threshold is
+/// `review`'s C2, not `act`'s C1; a commit (C2) is exactly at it.
 #[test]
 fn fallback_absent_at_threshold() {
-    let s = eval(vec![mitigated(
+    let s = eval_strong(vec![mitigated(
         fm("fm1", 3, 3),
         mitigation(
             "m1",
@@ -326,8 +334,9 @@ fn fallback_absent_at_threshold() {
 
 #[test]
 fn leaving_a_band_needs_that_bands_confidence() {
-    // `review` → `act` at C1: `act`'s own C1 is met, `review`'s C2 is not.
-    let s = eval(vec![mitigated(
+    // Strong mode, `review` → `act` at C1: `act`'s own C1 is met, `review`'s
+    // C2 is not.
+    let s = eval_strong(vec![mitigated(
         fm("fm1", 3, 3),
         mitigation(
             "m1",
@@ -337,6 +346,21 @@ fn leaving_a_band_needs_that_bands_confidence() {
         ),
     )]);
     assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
+}
+
+#[test]
+fn standard_mode_partial_reduction_needs_only_the_residual_bands_evidence() {
+    // Standard mode, `review` → `act` at C1: `act`'s own C1 is the threshold.
+    let s = eval(vec![mitigated(
+        fm("fm1", 3, 3),
+        mitigation(
+            "m1",
+            MitigationKind::Prevention,
+            (1, 3),
+            vec![evidence(EvidenceKind::File, None)],
+        ),
+    )]);
+    assert!(s.failure_modes[0].fallback.is_none());
 }
 
 // --- dispositions ------------------------------------------------------------

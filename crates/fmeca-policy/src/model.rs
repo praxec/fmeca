@@ -68,10 +68,10 @@ pub enum Precedence {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EvidenceMode {
-    /// The default: the highest of the residual band's own `min_confidence`
-    /// and, for a reduction, the `min_confidence` of the nearest band above
-    /// the residual (at or below the inherent band) that sets one. Leaving a
-    /// band needs at least the evidence of the first gated band left.
+    /// The default: the residual band's own `min_confidence`; only when it
+    /// sets none and the claim is a reduction, the `min_confidence` of the
+    /// nearest band above the residual (at or below the inherent band) that
+    /// sets one.
     #[default]
     Standard,
     /// Opt-in: the highest `min_confidence` over the residual band and every
