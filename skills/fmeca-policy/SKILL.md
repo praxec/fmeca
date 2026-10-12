@@ -9,7 +9,7 @@ A **risk policy** re-colours an analysis into the project's own bands, sets a si
 and suggests tagged actions. It is applied at query time and never written to the log, so
 one analysis can be read under several policies. The method is in
 [the fmeca reference](../fmeca/SKILL.md); the model, every preset and the action catalog are
-in [docs/policies.md](../../docs/policies.md). If this skill and the server disagree, the
+in [docs/policies.md](https://github.com/praxec/fmeca/blob/dev/docs/policies.md). If this skill and the server disagree, the
 server wins.
 
 ## When to use
@@ -70,7 +70,7 @@ Read the result:
   `dispositions` include `accept`; otherwise sign-off fails with "accepted in band ...
   which does not allow acceptance". The same rule covers a required `eliminate` or
   `procedure` action (`covered_by: ["acceptance"]`, with a non-empty rationale). See
-  [docs/policies.md](../../docs/policies.md).
+  [docs/policies.md](https://github.com/praxec/fmeca/blob/dev/docs/policies.md).
 - `excluded` failure modes are out of scope; `rollups.review_overdue` lists acceptances
   past their review date.
 
@@ -79,8 +79,10 @@ Errors, none of which fall back to another policy: `POLICY_NOT_FOUND`, `INVALID_
 
 ## 3. Write a project policy
 
-1. Copy the nearest preset's shape from [docs/policies.md](../../docs/policies.md) into
-   `.fmeca/policies/<name>.toml`. The name matches `^[a-z0-9][a-z0-9-]{0,63}$`.
+1. Copy [policy-template.toml](policy-template.toml) (shipped with this skill: a complete,
+   commented policy derived from `standard`) to `.fmeca/policies/<name>.toml` and set
+   `name` to `<name>`, which matches `^[a-z0-9][a-z0-9-]{0,63}$`. Every preset's bands
+   and cells are in [docs/policies.md](https://github.com/praxec/fmeca/blob/dev/docs/policies.md).
 2. Give every band a unique `id` and `rank`; every matrix needs `derived_from` and must be
    monotone. Unknown keys are rejected.
 3. Validate it, with the CLI: `fmeca-mcp policy validate .fmeca/policies/<name>.toml`

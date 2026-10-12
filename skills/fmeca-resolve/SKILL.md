@@ -113,7 +113,7 @@ band's `dispositions` include `accept`; otherwise policy sign-off fails with "ac
 band ... which does not allow acceptance". The same rule decides whether a required
 `eliminate` or `procedure` action is covered (`covered_by: ["acceptance"]`), and it also
 needs a non-empty rationale. Check the band before you ask for an approver. See
-[fmeca-policy](../fmeca-policy/SKILL.md) and [docs/policies.md](../../docs/policies.md).
+[fmeca-policy](../fmeca-policy/SKILL.md) and [docs/policies.md](https://github.com/praxec/fmeca/blob/dev/docs/policies.md).
 
 ## 5. Report
 

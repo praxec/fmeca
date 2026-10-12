@@ -603,6 +603,45 @@ fn relative_links_resolve() {
     assert!(offenders.is_empty(), "broken links: {offenders:?}");
 }
 
+/// `skills install` ships only `skills/`, so a relative link that leaves it
+/// would be broken in an installed skill: use an absolute URL instead.
+#[test]
+fn relative_links_stay_inside_the_skills_dir() {
+    let root = fs::canonicalize(skills_root()).expect("skills/ exists");
+    let mut offenders = Vec::new();
+    for path in files_with(&["md"]) {
+        let text = prose(&read(&path));
+        for (start, _) in text.match_indices("](") {
+            let rest = &text[start + 2..];
+            let Some(end) = rest.find(')') else { continue };
+            let target = rest[..end].split('#').next().unwrap_or("");
+            if target.is_empty() || target.contains("://") {
+                continue;
+            }
+            let dir = path.parent().unwrap_or(Path::new("."));
+            let inside = fs::canonicalize(dir.join(target)).is_ok_and(|t| t.starts_with(&root));
+            if !inside {
+                offenders.push(format!("{}: {target}", shown(&path)));
+            }
+        }
+    }
+    assert!(offenders.is_empty(), "links leaving skills/: {offenders:?}");
+}
+
+#[test]
+fn fmeca_policy_skill_embeds_its_policy_template() {
+    let embedded = fmeca_mcp::skills::embedded();
+    let shipped = embedded
+        .iter()
+        .find(|s| s.name == "fmeca-policy")
+        .is_some_and(|s| {
+            s.files
+                .iter()
+                .any(|(path, _)| path == "fmeca-policy/policy-template.toml")
+        });
+    assert!(shipped, "skills install must ship policy-template.toml");
+}
+
 #[test]
 fn json_examples_parse() {
     let mut offenders = Vec::new();

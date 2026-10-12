@@ -141,7 +141,7 @@ same analysis: the project's own risk bands, a sign-off rule and tagged actions 
 `actions.suggest` computes it at query time and never writes to the log or changes a score;
 `policy.list` shows the presets and the project's `.fmeca/policies/` files. Default
 `compat-0.1` gives the same verdict as `readiness.assess`. See
-[fmeca-policy](../fmeca-policy/SKILL.md) and [docs/policies.md](../../docs/policies.md).
+[fmeca-policy](../fmeca-policy/SKILL.md) and [docs/policies.md](https://github.com/praxec/fmeca/blob/dev/docs/policies.md).
 
 ## 9. vet is advisory
 
