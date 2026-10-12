@@ -106,6 +106,7 @@ fn parse_suggest(rest: &[String]) -> Result<SuggestArgs, UsageError> {
         format: OutputFormat::Json,
         dir: None,
     };
+    let mut format_seen = false;
     let mut index = 0;
     while index < rest.len() {
         match rest[index].as_str() {
@@ -132,6 +133,10 @@ fn parse_suggest(rest: &[String]) -> Result<SuggestArgs, UsageError> {
             }
             "--format" => {
                 let value = next_value(rest, &mut index, "--format")?;
+                if format_seen {
+                    return Err(UsageError("--format given twice".to_string()));
+                }
+                format_seen = true;
                 args.format = match value.as_str() {
                     "json" => OutputFormat::Json,
                     "markdown" => OutputFormat::Markdown,
@@ -170,19 +175,24 @@ fn parse_suggest(rest: &[String]) -> Result<SuggestArgs, UsageError> {
 
 /// Parse `policy validate <file>` and `policy list [--dir <state-dir>]`.
 fn parse_policy(rest: &[String]) -> Result<PolicyCommand, UsageError> {
-    match rest {
-        [sub, file] if sub == "validate" => Ok(PolicyCommand::Validate {
-            file: PathBuf::from(file),
-        }),
-        [sub] if sub == "validate" => {
-            Err(UsageError("policy validate requires a file".to_string()))
-        }
-        [sub, flag, dir] if sub == "list" && flag == "--dir" => Ok(PolicyCommand::List {
-            dir: Some(PathBuf::from(dir)),
-        }),
-        [sub] if sub == "list" => Ok(PolicyCommand::List { dir: None }),
-        [other, ..] => Err(UsageError(format!("unknown policy subcommand: {other}"))),
-        [] => Err(UsageError("policy requires a subcommand".to_string())),
+    match rest.first().map(String::as_str) {
+        Some("validate") => match &rest[1..] {
+            [file] => Ok(PolicyCommand::Validate {
+                file: PathBuf::from(file),
+            }),
+            [] => Err(UsageError("policy validate requires a file".to_string())),
+            [other, ..] => Err(UsageError(format!("unexpected argument: {other}"))),
+        },
+        Some("list") => match &rest[1..] {
+            [] => Ok(PolicyCommand::List { dir: None }),
+            [flag, dir] if flag == "--dir" => Ok(PolicyCommand::List {
+                dir: Some(PathBuf::from(dir)),
+            }),
+            [flag] if flag == "--dir" => Err(UsageError("--dir requires a value".to_string())),
+            [other, ..] => Err(UsageError(format!("unknown argument: {other}"))),
+        },
+        Some(other) => Err(UsageError(format!("unknown policy subcommand: {other}"))),
+        None => Err(UsageError("policy requires a subcommand".to_string())),
     }
 }
 

@@ -1,18 +1,18 @@
 //! Markdown rendering of [`Suggestions`] (plan Task 5, spec §5).
 //!
-//! The output is deterministic: bands in descending rank order (for a preset;
-//! project policies fall back to first appearance), failure modes in id order,
-//! actions with the required ones first, then the sign-off verdict and its
-//! reasons.
+//! The output is deterministic: bands in descending rank order from `policy`,
+//! failure modes in id order, actions with the required ones first, excluded
+//! failure modes, then the sign-off verdict and its reasons.
 
 use std::fmt::Write;
 
-use crate::model::Band;
+use crate::model::Policy;
 use crate::{ActionSuggestion, PolicySource};
 use crate::{DispositionKind, DispositionStatus, FmSuggestion, Precedence, Suggestions};
 
-/// Render suggestions as deterministic Markdown.
-pub fn to_markdown(s: &Suggestions) -> String {
+/// Render suggestions as deterministic Markdown, ordering band sections by
+/// `policy`'s [`rank`](crate::Band::rank).
+pub fn to_markdown(s: &Suggestions, policy: &Policy) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "# Risk policy suggestions — {}", s.policy.name);
     let _ = writeln!(out);
@@ -24,7 +24,7 @@ pub fn to_markdown(s: &Suggestions) -> String {
     let _ = writeln!(out, "- As of: `{}`", s.as_of);
     let _ = writeln!(out);
 
-    for band in bands_in_rank_order(s) {
+    for band in bands_in_rank_order(s, policy) {
         let _ = writeln!(out, "## {band}");
         let _ = writeln!(out);
         for fm in s
@@ -49,6 +49,15 @@ pub fn to_markdown(s: &Suggestions) -> String {
         }
     }
 
+    if !s.excluded.is_empty() {
+        let _ = writeln!(out, "## Excluded");
+        let _ = writeln!(out);
+        for fm in &s.excluded {
+            let _ = writeln!(out, "- `{}`: {}", fm.id, fm.rationale);
+        }
+        let _ = writeln!(out);
+    }
+
     let _ = writeln!(out, "## Sign-off");
     let _ = writeln!(out);
     let _ = writeln!(
@@ -62,29 +71,25 @@ pub fn to_markdown(s: &Suggestions) -> String {
     out
 }
 
-/// The band ids present, highest rank first. A preset's ladder supplies the
-/// ranks; otherwise the order in which bands first appear is used (still
-/// deterministic).
-fn bands_in_rank_order(s: &Suggestions) -> Vec<String> {
-    let mut seen: Vec<String> = Vec::new();
+/// The band ids present, highest `policy` rank first (then id ascending).
+fn bands_in_rank_order(s: &Suggestions, policy: &Policy) -> Vec<String> {
+    let mut present: Vec<String> = Vec::new();
     for fm in &s.failure_modes {
         if let Some(band) = &fm.effective_band
-            && !seen.contains(band)
+            && !present.contains(band)
         {
-            seen.push(band.clone());
+            present.push(band.clone());
         }
     }
-    if let Some(loaded) = crate::preset(&s.policy.name) {
-        let mut bands: Vec<&Band> = loaded
-            .policy
+    let rank = |id: &str| {
+        policy
             .bands
             .iter()
-            .filter(|band| seen.contains(&band.id))
-            .collect();
-        bands.sort_by(|a, b| b.rank.cmp(&a.rank).then_with(|| a.id.cmp(&b.id)));
-        return bands.into_iter().map(|band| band.id.clone()).collect();
-    }
-    seen
+            .find(|band| band.id == id)
+            .map(|band| band.rank)
+    };
+    present.sort_by(|a, b| rank(b).cmp(&rank(a)).then_with(|| a.cmp(b)));
+    present
 }
 
 fn render_fm(out: &mut String, fm: &FmSuggestion) {

@@ -104,7 +104,10 @@ fn run_suggest(args: SuggestArgs) -> anyhow::Result<()> {
     match args.format {
         OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&suggestions)?),
         OutputFormat::Markdown => {
-            print!("{}", fmeca_policy::render::to_markdown(&suggestions));
+            print!(
+                "{}",
+                fmeca_policy::render::to_markdown(&suggestions, &loaded.policy)
+            );
         }
     }
     if suggestions.signoff.pass {
@@ -195,6 +198,12 @@ fn run_policy_list(dir: Option<PathBuf>) -> anyhow::Result<()> {
         names.sort();
         names.dedup();
         for name in names {
+            // Presets resolve first, so a project file with a preset stem can
+            // never be used; show it rather than its shadowed contents.
+            if fmeca_policy::PRESET_NAMES.contains(&name.as_str()) {
+                println!("project {name} - shadowed-by-preset");
+                continue;
+            }
             match fmeca_policy::load_project_policy(&policies, &name) {
                 Ok(loaded) => print_policy_row("project", &loaded),
                 Err(error) => eprintln!("{error}"),
