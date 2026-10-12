@@ -24,6 +24,7 @@
 
 pub mod model;
 pub mod presets;
+pub mod render;
 
 mod confidence;
 mod eval;
