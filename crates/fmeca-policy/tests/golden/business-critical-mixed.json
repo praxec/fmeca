@@ -41,9 +41,7 @@
             "band review ≥ review",
             "required: band review ≥ review"
           ],
-          "covered_by": [
-            "acceptance"
-          ]
+          "covered_by": []
         },
         {
           "id": "simplify-design",
@@ -55,7 +53,7 @@
           "required": false,
           "why": [
             "band review rank 2 ≥ 2",
-            "no prevention mitigation"
+            "no implemented prevention mitigation"
           ],
           "covered_by": []
         },
@@ -116,7 +114,7 @@
           "why": [
             "band review ≥ review",
             "required: band review ≥ review",
-            "required: no prevention mitigation"
+            "required: no implemented prevention mitigation"
           ],
           "covered_by": []
         },
@@ -131,7 +129,7 @@
           "why": [
             "band review rank 2 ≥ 1",
             "domain runtime",
-            "no detection mitigation"
+            "no implemented detection mitigation"
           ],
           "covered_by": []
         },
@@ -382,7 +380,7 @@
           "why": [
             "band review rank 2 ≥ 1",
             "domain runtime",
-            "no detection mitigation"
+            "no implemented detection mitigation"
           ],
           "covered_by": []
         },
@@ -517,6 +515,10 @@
     "required_uncovered": [
       [
         "fm-acc",
+        "design-review"
+      ],
+      [
+        "fm-acc",
         "prevention-before-detection"
       ],
       [
@@ -538,6 +540,7 @@
     "pass": false,
     "reasons": [
       "fm-acc: accepted risk in band `review` is overdue for review",
+      "fm-acc: required action `design-review` is not covered",
       "fm-acc: required action `prevention-before-detection` is not covered",
       "fm-claimed: effective band `review` ranks above max_residual_band `compensate`",
       "fm-claimed: required action `design-review` is not covered",

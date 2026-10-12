@@ -760,12 +760,14 @@ fn suggest(
     let has_mitigation = fm.mitigations.iter().any(|m| m.is_active());
     let is_accepted = fm.disposition == fmeca::Disposition::Accepted;
 
+    let mut review_is_due = false;
     let status = if is_accepted {
         let accepted = fm.accepted.as_ref();
         let at = accepted.and_then(|a| a.at.clone());
+        review_is_due = review_due(effective, at.as_deref(), as_of)?;
         DispositionStatus::Accepted {
             approver: accepted.map(|a| a.approver.clone()).unwrap_or_default(),
-            review_due: review_due(effective, at.as_deref(), as_of)?,
+            review_due: review_is_due,
             at,
             acceptance_role: effective.and_then(|b| b.acceptance.clone()),
             concurrence: effective.map(|b| b.concurrence.clone()).unwrap_or_default(),
@@ -809,7 +811,8 @@ fn suggest(
             precedence: action.precedence,
             required: required.is_some(),
             why,
-            covered_by: if required.is_some() && acceptance_covers(action.precedence, fm, effective)
+            covered_by: if required.is_some()
+                && acceptance_covers(policy, action.precedence, fm, effective, review_is_due)
             {
                 vec![ACCEPTANCE.to_string()]
             } else {
@@ -877,10 +880,20 @@ fn suggested_disposition(band: &Band, low_confidence: bool) -> DispositionKind {
 pub const ACCEPTANCE: &str = "acceptance";
 
 /// A required `eliminate` or `procedure` action, which no mitigation kind
-/// covers, is satisfied by a recorded acceptance with a non-empty rationale in
-/// an effective band whose dispositions allow `accept`.
-fn acceptance_covers(precedence: Precedence, fm: &SubjectFm, effective: Option<&Band>) -> bool {
+/// covers, is satisfied by a recorded acceptance that counts under the
+/// sign-off rule: a non-empty rationale, `accepted_counts_as_pass`, not
+/// overdue for review when `accepted_requires_review_current`, and an
+/// effective band whose dispositions allow `accept`.
+fn acceptance_covers(
+    policy: &Policy,
+    precedence: Precedence,
+    fm: &SubjectFm,
+    effective: Option<&Band>,
+    review_is_due: bool,
+) -> bool {
     matches!(precedence, Precedence::Eliminate | Precedence::Procedure)
+        && policy.signoff.accepted_counts_as_pass
+        && !(policy.signoff.accepted_requires_review_current && review_is_due)
         && fm.disposition == fmeca::Disposition::Accepted
         && fm
             .accepted
@@ -902,13 +915,7 @@ fn covered_by(precedence: Precedence, fm: &SubjectFm) -> Vec<String> {
     };
     fm.mitigations
         .iter()
-        .filter(|m| {
-            m.kind == kind
-                && matches!(
-                    m.status,
-                    fmeca::MitigationStatus::Implemented | fmeca::MitigationStatus::Verified
-                )
-        })
+        .filter(|m| m.kind == kind && m.is_in_place())
         .map(|m| m.id.clone())
         .collect()
 }
@@ -1017,28 +1024,28 @@ impl Facts<'_> {
                 format!("class {}", self.policy.class)
             );
         }
+        // Only implemented or verified mitigations count: a plan is not
+        // coverage, so a planned prevention does not lift a requirement
+        // gated on `mitigation_kinds_missing = ["prevention"]`.
+        let in_place = |kind: &fmeca::MitigationKind| {
+            self.fm
+                .mitigations
+                .iter()
+                .any(|m| m.is_in_place() && m.kind == *kind)
+        };
         if let Some(kinds) = &c.mitigation_kinds_missing {
             let missing: Vec<String> = kinds.iter().map(name).collect();
             require!(
-                !self
-                    .fm
-                    .mitigations
-                    .iter()
-                    .any(|m| m.is_active() && kinds.contains(&m.kind)),
-                format!("no {} mitigation", missing.join("/"))
+                !kinds.iter().any(in_place),
+                format!("no implemented {} mitigation", missing.join("/"))
             );
         }
         if let Some(kinds) = &c.mitigation_kinds_present {
-            let present: Vec<String> = self
-                .fm
-                .mitigations
-                .iter()
-                .filter(|m| m.is_active() && kinds.contains(&m.kind))
-                .map(|m| name(&m.kind))
-                .collect();
+            // Each kind once, in the condition's order.
+            let present: Vec<String> = kinds.iter().filter(|k| in_place(k)).map(name).collect();
             require!(
                 !present.is_empty(),
-                format!("{} mitigation present", present.join("/"))
+                format!("{} mitigation implemented", present.join("/"))
             );
         }
         Ok(Some(why))

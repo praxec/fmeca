@@ -94,9 +94,13 @@ precedence = "prevent"
 applies_when = { band_at_least = "serious" }
 required_when = { band_at_least = "serious", mitigation_kinds_missing = ["prevention"] }
 
+# Required until the residual's evidence reaches C3 (tested). The confidence
+# ladder takes the best single item, so this checks for test-level evidence
+# (or better); it does not check that inspection evidence is also attached
+# (spec §6 said "test and inspection"; see docs/policies.md).
 [[actions]]
 id = "test-and-inspection-evidence"
-text = "Attach test and inspection evidence to the mitigations that reduce this hazard"
+text = "Attach test-level evidence (C3: a test, or better) to the mitigations that reduce this hazard; add inspection evidence too where it applies"
 tags = ["test", "review"]
 precedence = "procedure"
 applies_when = { band_at_least = "serious" }

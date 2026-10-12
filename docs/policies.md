@@ -76,9 +76,14 @@ hold): `band_at_least`, `band_in`, `rank_at_least` (the effective band's rank
 is at least N — band-agnostic, so the shared catalog can use it; an unscored
 failure mode never matches), `level_in`, `domain_in`, `response_class_in`,
 `single_point`, `confidence_below`, `confidence_at_least`, `disposition_in`,
-`fallback`, `class_in`, `mitigation_kinds_missing` (no active mitigation of
-these kinds) and `mitigation_kinds_present` (at least one active mitigation of
-these kinds).
+`fallback`, `class_in`, `mitigation_kinds_missing` (no implemented or verified
+mitigation of these kinds) and `mitigation_kinds_present` (at least one
+implemented or verified mitigation of these kinds). For both mitigation-kind
+keys a **planned** mitigation does not count — a plan is not coverage, the
+same rule as `covered_by` — so a planned prevention does not lift
+`prevention-before-detection`, and a planned fail-fast does not trigger
+`flag-procedural-only`. A policy's own `rank_at_least` may not exceed its
+highest band rank (`INVALID_POLICY: actions[i].…rank_at_least`).
 
 ## Confidence ladder
 
@@ -121,6 +126,19 @@ residual band.
 Under `confidence-view`, the fallback is computed under the `standard` preset,
 so `fallback {from, to}` name **standard's** bands (`none` / `compensate` /
 `review`), not `confidence-view`'s own.
+
+## One-shot analysis input
+
+`actions.suggest` with `analysis`, and `fmeca-mcp suggest --analysis
+<file.json>`, read an `analyze` envelope rather than a session. That input
+carries no analysis level, no single-point flags, no dispositions (every
+failure mode is open) and no resolution evidence (every mitigation is
+**planned**). So every residual is **C0**, every claimed reduction below a band
+with a `min_confidence` falls back to the inherent band, nothing is
+`covered_by` a mitigation, and `level_in` / `single_point = true` /
+`mitigation_kinds_present` never match. One-shot input suits **screening**
+("what would this policy flag?"); sign-off is meant for **sessions**, where
+mitigations are resolved with evidence and risks can be accepted.
 
 ## Presets
 
@@ -249,7 +267,7 @@ Required actions, at every analysis level, when the effective band is
 | Action | `required_when` | Covered by |
 |---|---|---|
 | `design-review` | `band_at_least = "review"` | a reasoned acceptance (`eliminate`); else mitigate below `review` |
-| `prevention-before-detection` | `band_at_least = "review"`, `mitigation_kinds_missing = ["prevention"]` | holds only while no active prevention exists |
+| `prevention-before-detection` | `band_at_least = "review"`, `mitigation_kinds_missing = ["prevention"]` | holds until an implemented or verified prevention exists (a planned one does not lift it) |
 | `mitigate-single-point` | `band_at_least = "review"`, `single_point = true` | an implemented or verified `prevention` mitigation |
 
 So a single point of failure left in `review` — even an accepted one — fails
@@ -300,11 +318,21 @@ Required-action tailoring, at every analysis level:
 | Action | `required_when` | Covered by |
 |---|---|---|
 | `design-review` | `band_at_least = "serious"` | a reasoned acceptance in `serious` (`eliminate`; `high` does not allow `accept`); else mitigate below `serious` |
-| `prevention-before-detection` | `band_at_least = "serious"`, `mitigation_kinds_missing = ["prevention"]` | holds only while no active prevention exists |
-| `test-and-inspection-evidence` | `band_at_least = "serious"`, `confidence_below = "C3"` | a reasoned acceptance in `serious` (`procedure`); else holds until the residual's evidence reaches C3 |
+| `prevention-before-detection` | `band_at_least = "serious"`, `mitigation_kinds_missing = ["prevention"]` | holds until an implemented or verified prevention exists (a planned one does not lift it) |
+| `test-and-inspection-evidence` | `band_at_least = "serious"`, `confidence_below = "C3"` | a reasoned acceptance in `serious` (`procedure`); else holds until the residual's evidence reaches C3 (tested) |
+
+`test-and-inspection-evidence` checks **test-level evidence only**: it is
+required while the residual's confidence is below C3, and the confidence
+ladder takes the best single evidence item, so one `test` item lifts it with
+no inspection evidence. It does not check that test **and** inspection
+evidence are both attached, as spec §6 put it — a deliberate deviation, since
+the ladder ranks evidence rather than recording which methods were used. The
+id is kept for stability; its text asks for test-level evidence and,
+where it applies, inspection evidence too.
 
 `flag-procedural-only` is suggested (not required) on `serious` and `high`
-when mitigations exist but all of them are `fail_fast`
+when the implemented or verified mitigations include a `fail_fast` and no
+`prevention` or `detection`
 (`mitigation_kinds_present = ["fail_fast"]`, `mitigation_kinds_missing =
 ["prevention", "detection"]`). The design order of precedence is presented by
 action ordering only; it is not enforced beyond the required actions above.

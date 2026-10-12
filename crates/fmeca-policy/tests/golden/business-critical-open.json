@@ -60,7 +60,7 @@
           "required": false,
           "why": [
             "band review rank 2 ≥ 2",
-            "no prevention mitigation"
+            "no implemented prevention mitigation"
           ],
           "covered_by": []
         },
@@ -138,7 +138,7 @@
           "why": [
             "band review ≥ review",
             "required: band review ≥ review",
-            "required: no prevention mitigation"
+            "required: no implemented prevention mitigation"
           ],
           "covered_by": []
         },
@@ -153,7 +153,7 @@
           "why": [
             "band review rank 2 ≥ 1",
             "domain runtime",
-            "no detection mitigation"
+            "no implemented detection mitigation"
           ],
           "covered_by": []
         },

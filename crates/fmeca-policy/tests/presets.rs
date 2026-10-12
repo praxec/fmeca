@@ -1024,6 +1024,32 @@ fn business_critical_single_point_covered_by_implemented_prevention() {
 }
 
 #[test]
+fn planned_prevention_does_not_lift_prevention_before_detection() {
+    // business-critical `review` (3×3 worst cell) with only a planned
+    // prevention: a plan is not coverage, so prevention is still missing.
+    let mut fm = open_fm("fm1", Domain::Runtime, false, (3, 3));
+    fm.residual = Some((1, 1));
+    fm.mitigations.push(mitigation(
+        "m1",
+        MitigationKind::Prevention,
+        MitigationStatus::Planned,
+        (1, 1),
+        Vec::new(),
+    ));
+    let s = evaluate(
+        &subject(MatrixStrategy::Qualitative3x3, None, vec![fm]),
+        &preset("business-critical").expect("preset"),
+        as_of(),
+    )
+    .unwrap();
+    assert!(
+        s.rollups
+            .required_uncovered
+            .contains(&("fm1".to_string(), "prevention-before-detection".to_string()))
+    );
+}
+
+#[test]
 fn flag_procedural_only_fires_only_with_fail_fast_only_mitigation() {
     let with = |id: &str, kind: MitigationKind| {
         let mut fm = open_fm(id, Domain::Runtime, false, (3, 3));

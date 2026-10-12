@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "safety-critical",
-    "hash": "3a9d2deb73cb66b5335f50a2704d83f8d61613c689e60eca2c20e03bb5391275",
+    "hash": "f32567038baffc60c522009c15d6a64e302f1ffc4a49261d8d42768c40a480f2",
     "class": "safety-critical",
     "matrix_derived_from": "nasa8004_5x5",
     "source": "preset"
@@ -50,7 +50,7 @@
           "required": false,
           "why": [
             "band high rank 3 ≥ 2",
-            "no prevention mitigation"
+            "no implemented prevention mitigation"
           ],
           "covered_by": []
         },
@@ -110,7 +110,7 @@
           "why": [
             "band high ≥ serious",
             "required: band high ≥ serious",
-            "required: no prevention mitigation"
+            "required: no implemented prevention mitigation"
           ],
           "covered_by": []
         },
@@ -125,7 +125,7 @@
           "why": [
             "band high rank 3 ≥ 1",
             "domain runtime",
-            "no detection mitigation"
+            "no implemented detection mitigation"
           ],
           "covered_by": []
         },
@@ -266,7 +266,7 @@
         },
         {
           "id": "test-and-inspection-evidence",
-          "text": "Attach test and inspection evidence to the mitigations that reduce this hazard",
+          "text": "Attach test-level evidence (C3: a test, or better) to the mitigations that reduce this hazard; add inspection evidence too where it applies",
           "tags": [
             "test",
             "review"
@@ -391,7 +391,7 @@
           "why": [
             "band high rank 3 ≥ 1",
             "domain runtime",
-            "no detection mitigation"
+            "no implemented detection mitigation"
           ],
           "covered_by": []
         },
@@ -488,7 +488,7 @@
         },
         {
           "id": "test-and-inspection-evidence",
-          "text": "Attach test and inspection evidence to the mitigations that reduce this hazard",
+          "text": "Attach test-level evidence (C3: a test, or better) to the mitigations that reduce this hazard; add inspection evidence too where it applies",
           "tags": [
             "test",
             "review"

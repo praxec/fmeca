@@ -220,6 +220,17 @@ fn validate_conditions(
             return Err(unknown_band(&format!("{field}.band_in[{j}]"), band));
         }
     }
+    let highest = ranks.values().copied().max().unwrap_or(0);
+    if let Some(at_least) = conditions.rank_at_least
+        && at_least > highest
+    {
+        return Err(invalid(
+            format!("{field}.rank_at_least"),
+            format!(
+                "{at_least} exceeds the highest band rank {highest}; the condition can never hold"
+            ),
+        ));
+    }
     Ok(())
 }
 

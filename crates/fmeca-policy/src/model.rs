@@ -167,13 +167,16 @@ pub struct Conditions {
     pub fallback: Option<bool>,
     /// The policy's class is one of these (for tailoring).
     pub class_in: Option<Vec<String>>,
-    /// None of the active mitigations is of any of these kinds.
+    /// No implemented or verified mitigation is of any of these kinds
+    /// (planned ones do not count: a plan is not coverage).
     pub mitigation_kinds_missing: Option<Vec<fmeca::MitigationKind>>,
-    /// At least one active mitigation is of one of these kinds.
+    /// At least one implemented or verified mitigation is of one of these
+    /// kinds (planned ones do not count).
     pub mitigation_kinds_present: Option<Vec<fmeca::MitigationKind>>,
     /// The effective band's rank is at least this. Band-agnostic, so the
     /// shared action catalog can use it across presets; an unscored failure
-    /// mode never matches.
+    /// mode never matches. In a policy's own actions it may not exceed the
+    /// policy's highest band rank.
     pub rank_at_least: Option<u8>,
 }
 

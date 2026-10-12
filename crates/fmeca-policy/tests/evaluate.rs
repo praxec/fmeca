@@ -952,3 +952,92 @@ fn acceptance_without_rationale_does_not_satisfy_required_action() {
     let s = evaluate(&subject(vec![f]), &critical_policy(), as_of()).unwrap();
     assert!(s.failure_modes[0].actions[0].covered_by.is_empty());
 }
+
+#[test]
+fn planned_fail_fast_does_not_count_as_present() {
+    let policy = policy_with_action(r#"{ mitigation_kinds_present = ["fail_fast"] }"#);
+    let mut m = mitigation("m1", MitigationKind::FailFast, (2, 2), vec![]);
+    m.status = MitigationStatus::Planned;
+    assert!(probed(&policy, vec![mitigated(fm("fm1", 3, 3), m)]).is_empty());
+}
+
+#[test]
+fn planned_prevention_does_not_count_against_missing() {
+    let policy = policy_with_action(r#"{ mitigation_kinds_missing = ["prevention"] }"#);
+    let mut m = mitigation("m1", MitigationKind::Prevention, (2, 2), vec![]);
+    m.status = MitigationStatus::Planned;
+    assert_eq!(
+        probed(&policy, vec![mitigated(fm("fm1", 3, 3), m)]),
+        vec!["fm1".to_string()]
+    );
+}
+
+#[test]
+fn mitigation_kinds_present_names_each_kind_once() {
+    let policy = policy_with_action(r#"{ mitigation_kinds_present = ["fail_fast"] }"#);
+    let mut f = mitigated(
+        fm("fm1", 3, 3),
+        mitigation("m1", MitigationKind::FailFast, (2, 2), vec![]),
+    );
+    f.mitigations
+        .push(mitigation("m2", MitigationKind::FailFast, (2, 2), vec![]));
+    let s = evaluate(&subject(vec![f]), &policy, as_of()).unwrap();
+    let why = s.failure_modes[0]
+        .actions
+        .iter()
+        .find(|a| a.id == "probe")
+        .map(|a| a.why.clone());
+    assert_eq!(
+        why,
+        Some(vec!["fail_fast mitigation implemented".to_string()])
+    );
+}
+
+#[test]
+fn acceptance_in_disallowing_band_leaves_required_action_uncovered() {
+    let policy = policy_from(
+        &TEST_POLICY
+            .replace("class = \"standard\"", "class = \"critical\"")
+            .replace(
+                r#"dispositions = ["mitigate", "research", "elevate", "accept"]"#,
+                r#"dispositions = ["mitigate", "research", "elevate"]"#,
+            ),
+    );
+    let subject = subject(vec![accepted(fm("fm1", 3, 3), "2026-10-01T00:00:00Z")]);
+    let s = evaluate(&subject, &policy, as_of()).unwrap();
+    assert_eq!(
+        s.rollups.required_uncovered,
+        vec![("fm1".to_string(), "remove-path".to_string())]
+    );
+}
+
+#[test]
+fn overdue_acceptance_does_not_cover_required_action_when_review_must_be_current() {
+    let policy = policy_from(
+        &TEST_POLICY
+            .replace("class = \"standard\"", "class = \"critical\"")
+            .replace(
+                "max_residual_band = \"act\"",
+                "max_residual_band = \"act\"\naccepted_requires_review_current = true",
+            ),
+    );
+    // Accepted 2026-01-01; `review` reviews every 90 days, so overdue.
+    let subject = subject(vec![accepted(fm("fm1", 3, 3), "2026-01-01T00:00:00Z")]);
+    let s = evaluate(&subject, &policy, as_of()).unwrap();
+    assert!(s.failure_modes[0].actions[0].covered_by.is_empty());
+}
+
+#[test]
+fn acceptance_does_not_cover_required_action_when_acceptance_does_not_count() {
+    let policy = policy_from(
+        &TEST_POLICY
+            .replace("class = \"standard\"", "class = \"critical\"")
+            .replace(
+                "max_residual_band = \"act\"",
+                "max_residual_band = \"act\"\naccepted_counts_as_pass = false",
+            ),
+    );
+    let subject = subject(vec![accepted(fm("fm1", 3, 3), "2026-10-01T00:00:00Z")]);
+    let s = evaluate(&subject, &policy, as_of()).unwrap();
+    assert!(s.failure_modes[0].actions[0].covered_by.is_empty());
+}

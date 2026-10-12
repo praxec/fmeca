@@ -129,6 +129,17 @@ impl SubjectMitigation {
     pub fn is_active(&self) -> bool {
         self.status != MitigationStatus::Abandoned
     }
+
+    /// True when the mitigation is implemented or verified: in place, not
+    /// merely planned. Only these cover an action or count for
+    /// `mitigation_kinds_missing` / `mitigation_kinds_present` (a plan is not
+    /// coverage).
+    pub fn is_in_place(&self) -> bool {
+        matches!(
+            self.status,
+            MitigationStatus::Implemented | MitigationStatus::Verified
+        )
+    }
 }
 
 /// Build a [`Subject`] from a projected session.
