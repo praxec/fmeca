@@ -17,11 +17,28 @@
 //! - [`model`] — the policy document types.
 //! - [`validate()`] — the spec §3 structural rules.
 //! - [`load_project_policy`] — the one filesystem reader.
+//! - [`Subject`] — what the evaluator reads, from a session or a one-shot
+//!   analysis.
+//! - [`evaluate`] — the deterministic evaluator (spec §4), with the
+//!   [confidence ladder](evidence_confidence).
 
 pub mod model;
 
+mod confidence;
+mod eval;
 mod load;
+mod subject;
 mod validate;
+
+pub use confidence::{evidence_confidence, residual_confidence};
+pub use eval::{
+    ActionSuggestion, Date, DispositionStatus, ExcludedFm, Fallback, FmSuggestion, GroupBy,
+    PolicyRef, Rollups, SignoffVerdict, Suggestions, evaluate, group, parse_date,
+};
+pub use subject::{
+    Accepted, KernelGate, Subject, SubjectFm, SubjectMitigation, subject_from_analysis,
+    subject_from_state,
+};
 
 pub use load::{load_project_policy, valid_policy_name};
 pub use model::{
