@@ -6,13 +6,15 @@
 // production state. Exits non-zero if either step fails or times out.
 import { spawn } from 'node:child_process';
 
-const bin = process.argv[2];
+// Any further arguments are passed to the command, so a launcher works too:
+// `mcp-smoke.mjs npx -y @matthew-cochran/fmeca@X.Y.Z` or `mcp-smoke.mjs docker run -i --rm IMAGE`.
+const [bin, ...args] = process.argv.slice(2);
 if (!bin) {
-  console.error('usage: mcp-smoke.mjs <path-to-mcp-binary>');
+  console.error('usage: mcp-smoke.mjs <path-to-mcp-binary | command> [args...]');
   process.exit(2);
 }
 
-const child = spawn(bin, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+const child = spawn(bin, args, { stdio: ['pipe', 'pipe', 'pipe'] });
 const pending = new Map();
 let buffer = '';
 let stderrText = '';

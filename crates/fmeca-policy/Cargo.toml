@@ -10,6 +10,9 @@ readme = "README.md"
 description = "Declarative risk policies for fmeca: the policy model, TOML parsing, validation, hashing, project-policy loading and a deterministic evaluator of suggested actions and sign-off. Pure: no network, no clock."
 keywords = ["fmeca", "risk", "policy", "failure-modes"]
 categories = ["development-tools"]
+# tests/template.rs checks the policy template shipped in ../../skills, which a
+# packaged crate cannot reach; it runs in the workspace only.
+exclude = ["tests/template.rs"]
 
 [lib]
 name = "fmeca_policy"
