@@ -43,6 +43,10 @@ envelope). Optional: `actions.suggest.as_of` (`YYYY-MM-DD`, default today, echoe
 `actions.suggest.group_by` (`failure_mode`, `band`, `tag` or `action`). Filters narrow
 `failure_modes`; `rollups` and `signoff` always cover the whole analysis.
 
+One-shot `analysis` input (and `--analysis` in the CLI) has no level, no single-point
+flags, no dispositions and no resolution evidence: every mitigation is planned, so every
+residual is C0 and nothing is `covered_by`. Use it to screen; run sign-off on a session.
+
 Read the result:
 - `policy`: name and hash. Quote both when you report, so the verdict can be reproduced.
 - per failure mode: `inherent_band`, `residual_band` and `effective_band`; `confidence`
@@ -86,7 +90,8 @@ Errors, none of which fall back to another policy: `POLICY_NOT_FOUND`, `INVALID_
 2. Give every band a unique `id` and `rank`; every matrix needs `derived_from` and must be
    monotone. Unknown keys are rejected.
 3. Validate it, with the CLI: `fmeca-mcp policy validate .fmeca/policies/<name>.toml`
-   prints `ok <name> <hash>` or the field that is wrong, and exits 2 on error.
+   prints `ok <name> <hash>` or the field that is wrong, and exits 2 on error. It also
+   fails when `name` differs from the file stem or the stem is a preset name (shadowed).
 4. Confirm with `policy.list` that it loads, then run `actions.suggest` with
    `actions.suggest.policy` set to the name.
 5. Commit the file. Its hash covers the file as written; the built-in action catalog is
@@ -97,7 +102,8 @@ Errors, none of which fall back to another policy: `POLICY_NOT_FOUND`, `INVALID_
 `fmeca-mcp suggest <session-id> --policy <name>` (or `--analysis <file.json>`) prints JSON,
 or markdown with `--format markdown`, and exits 0 when sign-off passes, 1 when it fails and
 2 on a usage or policy error. `fmeca-mcp policy list` prints one row per policy:
-`<source> <name> <hash> <class>`.
+`<source> <name> <hash> <class>`; a project file that fails to load (or is shadowed by a
+preset) is still listed, as `project <stem> - - <ERROR>`.
 
 ## 5. Report
 
