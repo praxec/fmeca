@@ -10,15 +10,16 @@
 //!
 //! 1. **Inherent band**: the policy matrix cell for the unmitigated
 //!    `(severity, probability)` ordinals (`cells[s - 1][p - 1]`). Unscored
-//!    failure modes have no band.
+//!    failure modes have no band, are C0, and fail sign-off (`<fm>:
+//!    unscored`) whatever `include_kernel_gate` says.
 //! 2. **Residual band**: the cell for [`SubjectFm::residual`] (the kernel's
 //!    best residual over the active mitigations). With no residual, the
 //!    kernel's rule applies and the residual is the inherent band.
 //! 3. **Confidence**: [`residual_confidence`].
 //! 4. **Effective band**: the residual band, unless the confidence is below
 //!    the residual band's `min_confidence`; then the inherent band, reported
-//!    as a [`Fallback`]. A fallback is reported only when it changes the
-//!    band.
+//!    as a [`Fallback`]. A fallback only ever raises the band: it applies
+//!    when the inherent band ranks above the residual band.
 //! 5. **Disposition**: accepted (with review status), or a suggested
 //!    disposition for an open failure mode; `rationale_needed`.
 //! 6. **Actions**: the catalog actions whose `applies_when` holds, sorted by
@@ -59,8 +60,14 @@ impl fmt::Display for Date {
     }
 }
 
-/// Parse `YYYY-MM-DD`, or an RFC 3339 timestamp (`YYYY-MM-DDThh:mm:ss…`),
-/// taking its date part. Dates before 1970-01-01 are rejected.
+/// Parse `YYYY-MM-DD`, or an RFC 3339 timestamp
+/// (`YYYY-MM-DDThh:mm:ss[.frac](Z|±hh:mm)`, `T` or a space as separator),
+/// taking its date part. Anything else after the date is rejected, as are
+/// dates before 1970-01-01.
+///
+/// Both `as_of` and an acceptance's `at` are treated as **UTC calendar
+/// dates**: the time and offset of a timestamp are checked for syntax and
+/// then ignored (the server stamps `at` in UTC).
 pub fn parse_date(s: &str) -> Result<Date, PolicyError> {
     let bad = || {
         invalid(
@@ -72,7 +79,8 @@ pub fn parse_date(s: &str) -> Result<Date, PolicyError> {
     if bytes.len() < 10
         || bytes[4] != b'-'
         || bytes[7] != b'-'
-        || (bytes.len() > 10 && !matches!(bytes[10], b'T' | b't' | b' '))
+        || (bytes.len() > 10
+            && !(matches!(bytes[10], b'T' | b't' | b' ') && is_rfc3339_time(&bytes[11..])))
     {
         return Err(bad());
     }
@@ -91,10 +99,35 @@ pub fn parse_date(s: &str) -> Result<Date, PolicyError> {
     u32::try_from(days).map(Date).map_err(|_| bad())
 }
 
-/// Leap year: March 1st is 29 days after February 1st.
+/// `hh:mm:ss[.frac](Z|z|±hh:mm)`: a syntax check only.
+fn is_rfc3339_time(t: &[u8]) -> bool {
+    let digits =
+        |r: std::ops::Range<usize>| t.get(r).is_some_and(|d| d.iter().all(u8::is_ascii_digit));
+    if !(digits(0..2)
+        && t.get(2) == Some(&b':')
+        && digits(3..5)
+        && t.get(5) == Some(&b':')
+        && digits(6..8))
+    {
+        return false;
+    }
+    let mut rest = &t[8..];
+    if let Some(frac) = rest.strip_prefix(b".") {
+        let n = frac.iter().take_while(|b| b.is_ascii_digit()).count();
+        if n == 0 {
+            return false;
+        }
+        rest = &frac[n..];
+    }
+    match rest {
+        [b'Z' | b'z'] => true,
+        [b'+' | b'-', h1, h2, b':', m1, m2] => [h1, h2, m1, m2].iter().all(|b| b.is_ascii_digit()),
+        _ => false,
+    }
+}
+
 fn is_leap(year: u32) -> bool {
-    let year = i64::from(year);
-    days_from_civil(year, 3, 1) - days_from_civil(year, 2, 1) == 29
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
 fn days_in_month(year: u32, month: u32) -> u32 {
@@ -187,7 +220,11 @@ pub struct FmSuggestion {
     pub actions: Vec<ActionSuggestion>,
 }
 
-/// A fallback from the residual band to the inherent band.
+/// A fallback from the residual band to the (worse) inherent band.
+///
+/// Under a confidence-view policy (one with a `confidence` matrix), `from`
+/// and `to` name the bands of the `standard` preset, whose effective band
+/// selects the confidence-matrix row, not the policy's own bands.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Fallback {
     /// The residual band.
@@ -439,12 +476,19 @@ pub(crate) fn evaluate_with(
                 if *review_due {
                     rollups.review_overdue.push(fm.id.clone());
                 }
-                overdue = *review_due && policy.signoff.accepted_requires_review_current;
+                // "Overdue" is the reason only when the acceptance would
+                // otherwise have counted as a pass.
+                overdue = policy.signoff.accepted_counts_as_pass
+                    && *review_due
+                    && policy.signoff.accepted_requires_review_current;
                 accepted_ok = policy.signoff.accepted_counts_as_pass && !overdue;
                 "accepted"
             }
         };
         *rollups.by_status.entry(status_key.to_string()).or_default() += 1;
+        if fm.inherent.is_none() {
+            reasons.push(format!("{}: unscored", fm.id));
+        }
         if let Some(effective) = banded.effective
             && effective.rank > max_band.rank
             && !accepted_ok
@@ -624,7 +668,10 @@ fn bands<'p>(
     let threshold = residual.min_confidence.filter(|&m| confidence < m);
     let low_confidence = fm.residual.is_some() && threshold.is_some();
     let fallback = match threshold {
-        Some(threshold) if low_confidence && residual.id != inherent.id => Some(FallbackRef {
+        // Fall back only to a worse inherent band: low confidence never
+        // lowers the band (a residual can be worse than the inherent value,
+        // e.g. after a rescore down).
+        Some(threshold) if low_confidence && inherent.rank > residual.rank => Some(FallbackRef {
             from: residual,
             to: inherent,
             threshold,
@@ -765,8 +812,9 @@ fn suggested_disposition(band: &Band, low_confidence: bool) -> DispositionKind {
     }
 }
 
-/// Active mitigations of the kind that satisfies `precedence`: prevent →
-/// prevention, detect → detection, contain → fail-fast. Eliminate and
+/// Implemented or verified mitigations of the kind that satisfies
+/// `precedence`: prevent → prevention, detect → detection, contain →
+/// fail-fast. Planned and abandoned mitigations do not cover; eliminate and
 /// procedure are never auto-covered.
 fn covered_by(precedence: Precedence, fm: &SubjectFm) -> Vec<String> {
     let kind = match precedence {
@@ -777,7 +825,13 @@ fn covered_by(precedence: Precedence, fm: &SubjectFm) -> Vec<String> {
     };
     fm.mitigations
         .iter()
-        .filter(|m| m.is_active() && m.kind == kind)
+        .filter(|m| {
+            m.kind == kind
+                && matches!(
+                    m.status,
+                    fmeca::MitigationStatus::Implemented | fmeca::MitigationStatus::Verified
+                )
+        })
         .map(|m| m.id.clone())
         .collect()
 }

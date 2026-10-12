@@ -194,7 +194,7 @@ fn note_only_evidence_is_c0() {
 }
 
 #[test]
-fn design_basis_is_c1() {
+fn url_with_design_basis_is_c1() {
     assert_eq!(
         evidence_confidence(&evidence(EvidenceKind::Url, Some(EvidenceBasis::Design))),
         Confidence::C1
@@ -657,5 +657,122 @@ fn group_by_band_lists_failure_modes() {
     assert_eq!(
         fmeca_policy::group(&s, fmeca_policy::GroupBy::Band)["review"],
         vec!["fm1".to_string(), "fm2".to_string()]
+    );
+}
+
+// --- fix round 1 -----------------------------------------------------------------
+
+#[test]
+fn note_with_test_basis_is_still_c0() {
+    assert_eq!(
+        evidence_confidence(&evidence(EvidenceKind::Note, Some(EvidenceBasis::Test))),
+        Confidence::C0
+    );
+}
+
+#[test]
+fn failure_history_basis_is_c4() {
+    assert_eq!(
+        evidence_confidence(&evidence(
+            EvidenceKind::File,
+            Some(EvidenceBasis::FailureHistory)
+        )),
+        Confidence::C4
+    );
+}
+
+#[test]
+fn pull_request_is_c2() {
+    assert_eq!(
+        evidence_confidence(&evidence(EvidenceKind::PullRequest, None)),
+        Confidence::C2
+    );
+}
+
+#[test]
+fn low_confidence_never_lowers_band() {
+    // Inherent `act` (1, 3); the recorded residual (3, 3) is worse, `review`,
+    // at C0 — below `review`'s C2, but falling back would lower the band.
+    let s = eval(vec![mitigated(
+        fm("fm1", 1, 3),
+        mitigation("m1", MitigationKind::Prevention, (3, 3), vec![]),
+    )]);
+    assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
+}
+
+#[test]
+fn planned_mitigation_does_not_cover() {
+    let mut m = mitigation("m1", MitigationKind::Detection, (3, 2), vec![]);
+    m.status = MitigationStatus::Planned;
+    let s = eval(vec![mitigated(fm("fm1", 3, 3), m)]);
+    assert!(s.failure_modes[0].actions[1].covered_by.is_empty());
+}
+
+#[test]
+fn contain_is_covered_by_fail_fast() {
+    let policy =
+        policy_from(&TEST_POLICY.replace("precedence = \"detect\"", "precedence = \"contain\""));
+    let subject = subject(vec![mitigated(
+        fm("fm1", 3, 3),
+        mitigation("m1", MitigationKind::FailFast, (3, 2), vec![]),
+    )]);
+    let s = evaluate(&subject, &policy, as_of()).unwrap();
+    assert_eq!(
+        s.failure_modes[0].actions[1].covered_by,
+        vec!["m1".to_string()]
+    );
+}
+
+fn unscored(id: &str) -> SubjectFm {
+    let mut f = mitigated(
+        fm(id, 1, 1),
+        mitigation(
+            "m1",
+            MitigationKind::Prevention,
+            (1, 1),
+            vec![evidence(EvidenceKind::Test, None)],
+        ),
+    );
+    f.inherent = None;
+    f
+}
+
+#[test]
+fn unscored_is_c0() {
+    assert_eq!(
+        eval(vec![unscored("fm1")]).failure_modes[0].confidence,
+        Confidence::C0
+    );
+}
+
+#[test]
+fn unscored_fails_signoff_without_kernel_gate() {
+    let policy = policy_from(&TEST_POLICY.replace(
+        "max_residual_band = \"act\"",
+        "max_residual_band = \"act\"\ninclude_kernel_gate = false",
+    ));
+    let s = evaluate(&subject(vec![unscored("fm1")]), &policy, as_of()).unwrap();
+    assert_eq!(s.signoff.reasons, vec!["fm1: unscored".to_string()]);
+}
+
+#[test]
+fn parse_date_rejects_trailing_junk() {
+    assert!(matches!(
+        parse_date("2026-10-12Tjunk"),
+        Err(PolicyError::Invalid { .. })
+    ));
+}
+
+#[test]
+fn overdue_reason_only_when_acceptance_counts() {
+    let policy = policy_from(&TEST_POLICY.replace(
+        "max_residual_band = \"act\"",
+        "max_residual_band = \"act\"\naccepted_counts_as_pass = false\naccepted_requires_review_current = true",
+    ));
+    let subject = subject(vec![accepted(fm("fm1", 3, 3), "2026-01-01T00:00:00Z")]);
+    let s = evaluate(&subject, &policy, as_of()).unwrap();
+    assert_eq!(
+        s.signoff.reasons,
+        vec!["fm1: effective band `review` ranks above max_residual_band `act`".to_string()]
     );
 }

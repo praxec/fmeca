@@ -2,7 +2,7 @@
 //!
 //! | Level | Evidence that reaches it |
 //! |---|---|
-//! | C0 | no evidence, or only `note` items |
+//! | C0 | no evidence, or only `note` items (a `note` is C0 whatever its basis: evidence must be locatable) |
 //! | C1 | basis `design`; or kind `file` / `url` without a basis |
 //! | C2 | basis `inspection`; or kind `pull_request` / `commit` |
 //! | C3 | basis `test`, or kind `test` |
@@ -34,8 +34,12 @@ pub fn evidence_confidence(e: &ResolutionEvidence) -> Confidence {
 
 /// The confidence in a failure mode's residual: the best evidence item over
 /// the active mitigations that achieve [`SubjectFm::residual`]. C0 when no
-/// mitigation achieves it (including a failure mode with no mitigations).
+/// mitigation achieves it (including a failure mode with no mitigations), and
+/// C0 for an unscored failure mode.
 pub fn residual_confidence(fm: &SubjectFm) -> Confidence {
+    if fm.inherent.is_none() {
+        return Confidence::C0;
+    }
     let Some(residual) = fm.residual else {
         return Confidence::C0;
     };
