@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "safety-critical",
-    "hash": "32265c1bbb2675666e6bcec4c7c7c0fcf66198db4cca2ae8dfee8143fb662f5c",
+    "hash": "f32567038baffc60c522009c15d6a64e302f1ffc4a49261d8d42768c40a480f2",
     "class": "safety-critical",
     "matrix_derived_from": "qualitative3x3",
     "source": "preset"

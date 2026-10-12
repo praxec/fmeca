@@ -77,8 +77,11 @@ pub struct Band {
     /// Leaving a failure mode in this band without action needs a rationale.
     #[serde(default)]
     pub no_action_needs_rationale: bool,
-    /// A residual counts in this band only at or above this confidence;
-    /// below it, the inherent band applies.
+    /// The evidence needed to claim a residual in this band, or a reduction
+    /// out of it: a residual counts only when its confidence reaches the
+    /// highest `min_confidence` of its own band and of every band between it
+    /// and the inherent band (inclusive); below that, the inherent band
+    /// applies.
     pub min_confidence: Option<Confidence>,
     /// Suggested role to accept a risk left in this band.
     pub acceptance: Option<String>,
@@ -118,11 +121,23 @@ pub struct Signoff {
     /// …unless its review is overdue (default `false`).
     #[serde(default)]
     pub accepted_requires_review_current: bool,
-    /// When true (the default), the analysis's kernel readiness blockers
-    /// (CLARIFY, weak mitigation order, EMPTY) are added to the policy's
-    /// sign-off reasons.
+    /// When true (the default), the kernel's readiness **hygiene** blockers
+    /// are added to the policy's sign-off reasons as `kernel: <blocker>`:
+    /// CLARIFY (an open failure mode missing cause, effect or score), weak
+    /// mitigation order (DISCIPLINE) and EMPTY. The kernel's residual-zone
+    /// blockers (RESIDUAL: an open Medium/High residual) are **not** added:
+    /// the residual rule is this policy's own `max_residual_band`
+    /// (see [`KernelGate`](crate::KernelGate)).
     #[serde(default = "yes")]
     pub include_kernel_gate: bool,
+    /// When true (the default), every unscored failure mode that is not
+    /// excluded fails sign-off as `<fm>: unscored`, open or accepted. When
+    /// false, that reason is not emitted: an open unscored failure mode still
+    /// fails through the kernel gate's CLARIFY blocker (with
+    /// `include_kernel_gate`), and an accepted one passes, as in fmeca 0.1's
+    /// `readiness.assess` (`compat-0.1` sets it to false).
+    #[serde(default = "yes")]
+    pub unscored_fails: bool,
 }
 
 /// Conditions on a failure mode; every condition present must hold. An empty
@@ -152,13 +167,16 @@ pub struct Conditions {
     pub fallback: Option<bool>,
     /// The policy's class is one of these (for tailoring).
     pub class_in: Option<Vec<String>>,
-    /// None of the active mitigations is of any of these kinds.
+    /// No implemented or verified mitigation is of any of these kinds
+    /// (planned ones do not count: a plan is not coverage).
     pub mitigation_kinds_missing: Option<Vec<fmeca::MitigationKind>>,
-    /// At least one active mitigation is of one of these kinds.
+    /// At least one implemented or verified mitigation is of one of these
+    /// kinds (planned ones do not count).
     pub mitigation_kinds_present: Option<Vec<fmeca::MitigationKind>>,
     /// The effective band's rank is at least this. Band-agnostic, so the
     /// shared action catalog can use it across presets; an unscored failure
-    /// mode never matches.
+    /// mode never matches. In a policy's own actions it may not exceed the
+    /// policy's highest band rank.
     pub rank_at_least: Option<u8>,
 }
 

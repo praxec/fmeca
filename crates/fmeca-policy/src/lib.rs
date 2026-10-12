@@ -38,8 +38,8 @@ pub use eval::{
     GroupBy, PolicyRef, Rollups, SignoffVerdict, Suggestions, evaluate, group, parse_date,
 };
 pub use subject::{
-    Accepted, KernelGate, Subject, SubjectFm, SubjectMitigation, subject_from_analysis,
-    subject_from_state,
+    Accepted, KERNEL_RESIDUAL_PREFIX, KernelGate, Subject, SubjectFm, SubjectMitigation,
+    subject_from_analysis, subject_from_state,
 };
 
 pub use load::{load_project_policy, valid_policy_name};

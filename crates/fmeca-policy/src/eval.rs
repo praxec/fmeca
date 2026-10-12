@@ -10,15 +10,20 @@
 //!
 //! 1. **Inherent band**: the policy matrix cell for the unmitigated
 //!    `(severity, probability)` ordinals (`cells[s - 1][p - 1]`). Unscored
-//!    failure modes have no band, are C0, and fail sign-off (`<fm>:
-//!    unscored`) whatever `include_kernel_gate` says.
+//!    failure modes have no band, are C0, and — when `unscored_fails` (the
+//!    default) — fail sign-off (`<fm>: unscored`) whatever
+//!    `include_kernel_gate` says.
 //! 2. **Residual band**: the cell for [`SubjectFm::residual`] (the kernel's
 //!    best residual over the active mitigations). With no residual, the
 //!    kernel's rule applies and the residual is the inherent band.
 //! 3. **Confidence**: [`residual_confidence`].
 //! 4. **Effective band**: the residual band, unless the confidence is below
-//!    the residual band's `min_confidence`; then the inherent band, reported
-//!    as a [`Fallback`]. A fallback only ever raises the band: it applies
+//!    the required confidence — the highest `min_confidence` over the
+//!    residual band and every band the claimed reduction leaves (ranked
+//!    above the residual band, at or below the inherent band); then the
+//!    inherent band, reported as a [`Fallback`]. Claiming to leave a band
+//!    needs that band's evidence, so the threshold is monotone in the
+//!    claimed reduction. A fallback only ever raises the band: it applies
 //!    when the inherent band ranks above the residual band.
 //! 5. **Disposition**: accepted (with review status), or a suggested
 //!    disposition for an open failure mode; `rationale_needed`.
@@ -28,7 +33,10 @@
 //! **Sign-off**: an effective band above `max_residual_band` fails unless the
 //! failure mode is accepted, `accepted_counts_as_pass` holds, the review is
 //! not overdue (when `accepted_requires_review_current`), and the effective
-//! band's `dispositions` include `accept`.
+//! band's `dispositions` include `accept`. With `include_kernel_gate`, the
+//! kernel's hygiene blockers ([`KernelGate`](crate::KernelGate): CLARIFY,
+//! weak mitigation order, EMPTY — never its residual-zone blockers) are added
+//! as `kernel: <blocker>`.
 //!
 //! # Confidence-view policies
 //!
@@ -501,7 +509,7 @@ pub(crate) fn evaluate_with(
             }
         };
         *rollups.by_status.entry(status_key.to_string()).or_default() += 1;
-        if fm.inherent.is_none() {
+        if fm.inherent.is_none() && policy.signoff.unscored_fails {
             reasons.push(format!("{}: unscored", fm.id));
         }
         if let Some(effective) = banded.effective
@@ -651,7 +659,8 @@ struct Banded<'p> {
     inherent: Option<&'p Band>,
     residual: Option<&'p Band>,
     effective: Option<&'p Band>,
-    /// Confidence is below the residual band's `min_confidence`.
+    /// Confidence is below the residual's required confidence
+    /// ([`required_confidence`]).
     low_confidence: bool,
     fallback: Option<FallbackRef<'p>>,
 }
@@ -661,7 +670,30 @@ struct Banded<'p> {
 struct FallbackRef<'p> {
     from: &'p Band,
     to: &'p Band,
+    /// The required confidence ([`required_confidence`]).
     threshold: Confidence,
+    /// The band whose `min_confidence` set `threshold`.
+    needed_by: &'p Band,
+}
+
+/// The confidence a residual needs to count (rule 4; 0.2 final review
+/// ruling): the highest `min_confidence` over the residual band itself and
+/// every band the claimed reduction leaves — those ranked above the residual
+/// band and at or below the inherent band — with the band that sets it
+/// (the highest-ranked on a tie). Claiming to leave a band needs that band's
+/// evidence, so a bigger claimed reduction never needs less. `None` when none
+/// of those bands sets a `min_confidence`.
+fn required_confidence<'p>(
+    policy: &'p Policy,
+    inherent: &Band,
+    residual: &'p Band,
+) -> Option<(Confidence, &'p Band)> {
+    policy
+        .bands
+        .iter()
+        .filter(|b| b.id == residual.id || (b.rank > residual.rank && b.rank <= inherent.rank))
+        .filter_map(|b| b.min_confidence.map(|m| (m, b)))
+        .max_by_key(|(m, b)| (*m, b.rank))
 }
 
 /// Rules 1, 2 and 4 under `policy`'s S×P `matrix`.
@@ -685,17 +717,20 @@ fn bands<'p>(
         Some(cell) => sxp_cell(policy, matrix, cell)?,
         None => inherent,
     };
-    let threshold = residual.min_confidence.filter(|&m| confidence < m);
-    let low_confidence = fm.residual.is_some() && threshold.is_some();
-    let fallback = match threshold {
+    let required = required_confidence(policy, inherent, residual).filter(|r| confidence < r.0);
+    let low_confidence = fm.residual.is_some() && required.is_some();
+    let fallback = match required {
         // Fall back only to a worse inherent band: low confidence never
         // lowers the band (a residual can be worse than the inherent value,
         // e.g. after a rescore down).
-        Some(threshold) if low_confidence && inherent.rank > residual.rank => Some(FallbackRef {
-            from: residual,
-            to: inherent,
-            threshold,
-        }),
+        Some((threshold, needed_by)) if low_confidence && inherent.rank > residual.rank => {
+            Some(FallbackRef {
+                from: residual,
+                to: inherent,
+                threshold,
+                needed_by,
+            })
+        }
         _ => None,
     };
     Ok(Banded {
@@ -725,12 +760,14 @@ fn suggest(
     let has_mitigation = fm.mitigations.iter().any(|m| m.is_active());
     let is_accepted = fm.disposition == fmeca::Disposition::Accepted;
 
+    let mut review_is_due = false;
     let status = if is_accepted {
         let accepted = fm.accepted.as_ref();
         let at = accepted.and_then(|a| a.at.clone());
+        review_is_due = review_due(effective, at.as_deref(), as_of)?;
         DispositionStatus::Accepted {
             approver: accepted.map(|a| a.approver.clone()).unwrap_or_default(),
-            review_due: review_due(effective, at.as_deref(), as_of)?,
+            review_due: review_is_due,
             at,
             acceptance_role: effective.and_then(|b| b.acceptance.clone()),
             concurrence: effective.map(|b| b.concurrence.clone()).unwrap_or_default(),
@@ -774,7 +811,8 @@ fn suggest(
             precedence: action.precedence,
             required: required.is_some(),
             why,
-            covered_by: if required.is_some() && acceptance_covers(action.precedence, fm, effective)
+            covered_by: if required.is_some()
+                && acceptance_covers(policy, action.precedence, fm, effective, review_is_due)
             {
                 vec![ACCEPTANCE.to_string()]
             } else {
@@ -793,8 +831,9 @@ fn suggest(
             from: f.from.id.clone(),
             to: f.to.id.clone(),
             reason: format!(
-                "confidence {confidence:?} is below `{}`'s min_confidence {:?}",
-                f.from.id, f.threshold
+                "confidence {confidence:?} is below `{}`'s min_confidence {:?}, \
+                 needed to claim `{}` → `{}`",
+                f.needed_by.id, f.threshold, f.to.id, f.from.id
             ),
         }),
         status,
@@ -841,10 +880,20 @@ fn suggested_disposition(band: &Band, low_confidence: bool) -> DispositionKind {
 pub const ACCEPTANCE: &str = "acceptance";
 
 /// A required `eliminate` or `procedure` action, which no mitigation kind
-/// covers, is satisfied by a recorded acceptance with a non-empty rationale in
-/// an effective band whose dispositions allow `accept`.
-fn acceptance_covers(precedence: Precedence, fm: &SubjectFm, effective: Option<&Band>) -> bool {
+/// covers, is satisfied by a recorded acceptance that counts under the
+/// sign-off rule: a non-empty rationale, `accepted_counts_as_pass`, not
+/// overdue for review when `accepted_requires_review_current`, and an
+/// effective band whose dispositions allow `accept`.
+fn acceptance_covers(
+    policy: &Policy,
+    precedence: Precedence,
+    fm: &SubjectFm,
+    effective: Option<&Band>,
+    review_is_due: bool,
+) -> bool {
     matches!(precedence, Precedence::Eliminate | Precedence::Procedure)
+        && policy.signoff.accepted_counts_as_pass
+        && !(policy.signoff.accepted_requires_review_current && review_is_due)
         && fm.disposition == fmeca::Disposition::Accepted
         && fm
             .accepted
@@ -866,13 +915,7 @@ fn covered_by(precedence: Precedence, fm: &SubjectFm) -> Vec<String> {
     };
     fm.mitigations
         .iter()
-        .filter(|m| {
-            m.kind == kind
-                && matches!(
-                    m.status,
-                    fmeca::MitigationStatus::Implemented | fmeca::MitigationStatus::Verified
-                )
-        })
+        .filter(|m| m.kind == kind && m.is_in_place())
         .map(|m| m.id.clone())
         .collect()
 }
@@ -981,28 +1024,28 @@ impl Facts<'_> {
                 format!("class {}", self.policy.class)
             );
         }
+        // Only implemented or verified mitigations count: a plan is not
+        // coverage, so a planned prevention does not lift a requirement
+        // gated on `mitigation_kinds_missing = ["prevention"]`.
+        let in_place = |kind: &fmeca::MitigationKind| {
+            self.fm
+                .mitigations
+                .iter()
+                .any(|m| m.is_in_place() && m.kind == *kind)
+        };
         if let Some(kinds) = &c.mitigation_kinds_missing {
             let missing: Vec<String> = kinds.iter().map(name).collect();
             require!(
-                !self
-                    .fm
-                    .mitigations
-                    .iter()
-                    .any(|m| m.is_active() && kinds.contains(&m.kind)),
-                format!("no {} mitigation", missing.join("/"))
+                !kinds.iter().any(in_place),
+                format!("no implemented {} mitigation", missing.join("/"))
             );
         }
         if let Some(kinds) = &c.mitigation_kinds_present {
-            let present: Vec<String> = self
-                .fm
-                .mitigations
-                .iter()
-                .filter(|m| m.is_active() && kinds.contains(&m.kind))
-                .map(|m| name(&m.kind))
-                .collect();
+            // Each kind once, in the condition's order.
+            let present: Vec<String> = kinds.iter().filter(|k| in_place(k)).map(name).collect();
             require!(
                 !present.is_empty(),
-                format!("{} mitigation present", present.join("/"))
+                format!("{} mitigation implemented", present.join("/"))
             );
         }
         Ok(Some(why))

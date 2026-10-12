@@ -1,0 +1,133 @@
+# A complete project risk policy for fmeca, derived from the built-in
+# `standard` preset. Copy it to `.fmeca/policies/<name>.toml`, set `name` to
+# that file stem, edit, then check it:
+#
+#   fmeca-mcp policy validate .fmeca/policies/<name>.toml
+#
+# Unknown keys are rejected. The full reference (every key, every preset, the
+# confidence ladder, the fallback rule) is
+# https://github.com/praxec/fmeca/blob/dev/docs/policies.md
+
+# Must equal the file stem (`policy validate` and `policy.list` check it).
+# Lower-case letters, digits and `-`, at most 64 characters.
+name = "policy-template"
+description = "Team policy derived from standard"
+# A free label; class_in conditions match it.
+class = "standard"
+# The only schema version.
+schema = 1
+# Also suggest fmeca's built-in action catalog (merged at query time; your own
+# actions with the same id win).
+include_builtin_actions = true
+
+# --- bands: the risk ladder, rank 0 = best. Ids and ranks are unique. -------
+
+[[bands]]
+id = "none"
+label = "No action"
+rank = 0
+# From: accept, mitigate, watch, research, close, elevate.
+dispositions = ["close", "accept"]
+
+[[bands]]
+id = "compensate"
+label = "Compensating action required"
+rank = 1
+dispositions = ["mitigate", "watch", "accept"]
+# Leaving a failure mode here with no mitigation needs a written rationale.
+no_action_needs_rationale = true
+# Evidence needed to claim a residual in this band, or a reduction out of it
+# (C0 declared, C1 analysed, C2 inspected, C3 tested, C4 proven in use).
+# Below it, the inherent band stands (the fallback rule).
+min_confidence = "C1"
+# Suggested role to accept a risk left here, and its review interval.
+acceptance = "tech_lead"
+review_interval = "180d"
+
+[[bands]]
+id = "review"
+label = "Compensating actions with deliverable review and re-evaluation"
+rank = 2
+dispositions = ["mitigate", "research", "elevate", "accept"]
+no_action_needs_rationale = true
+min_confidence = "C2"
+acceptance = "eng_manager"
+# Roles that must concur with an acceptance (suggested, not enforced).
+concurrence = ["tech_lead"]
+review_interval = "90d"
+
+# --- matrices: band per (severity, probability) ordinal ---------------------
+# Rows are severity ordinals (least severe first), columns probability
+# ordinals (least probable first). Each matrix must be monotone: a cell's rank
+# never decreases rightwards or downwards. Keep the one(s) your analyses use.
+
+[matrices.qualitative3x3]
+derived_from = "qualitative3x3"
+cells = [
+  ["none",       "none",       "compensate"],
+  ["none",       "compensate", "review"],
+  ["compensate", "review",     "review"],
+]
+
+[matrices.nasa8004_5x5]
+derived_from = "nasa8004_5x5"
+cells = [
+  ["none",       "none",       "none",       "compensate", "compensate"],
+  ["none",       "none",       "compensate", "compensate", "review"],
+  ["none",       "compensate", "compensate", "review",     "review"],
+  ["compensate", "compensate", "review",     "review",     "review"],
+  ["compensate", "review",     "review",     "review",     "review"],
+]
+
+# --- optional confidence block ----------------------------------------------
+# Enable it (delete the `#> ` prefixes) to read the effective band from the
+# built-in `standard` preset's effective band (rows: rank 0, 1, 2) crossed
+# with the residual confidence (columns C4, C3, C2, C1, C0), as the
+# `confidence-view` preset does. With it, the S×P matrices above give only the
+# inherent and residual bands.
+#
+#> [matrices.confidence]
+#> derived_from = "standard-bands"
+#> cells = [
+#>   ["none",       "none",       "none",       "compensate", "compensate"],
+#>   ["none",       "compensate", "compensate", "review",     "review"],
+#>   ["compensate", "review",     "review",     "review",     "review"],
+#> ]
+
+# --- sign-off ----------------------------------------------------------------
+
+[signoff]
+# Effective bands ranked above this fail sign-off unless accepted.
+max_residual_band = "compensate"
+# An accepted risk passes (only in a band whose dispositions include accept)...
+accepted_counts_as_pass = true
+# ...unless its review is overdue.
+accepted_requires_review_current = true
+# Add the kernel's hygiene blockers (CLARIFY, weak mitigation order, EMPTY;
+# never its residual zones) to the reasons as `kernel: <blocker>`.
+include_kernel_gate = true
+# An unscored failure mode fails sign-off as `<fm>: unscored`.
+unscored_fails = true
+
+# --- actions -----------------------------------------------------------------
+# precedence: eliminate, prevent, detect, contain, procedure. applies_when
+# decides whether an action is suggested, required_when whether it is
+# required; a required action nothing covers fails sign-off. prevent, detect
+# and contain are covered by an implemented or verified prevention, detection
+# or fail_fast mitigation; a planned one never counts.
+
+[[actions]]
+id = "design-review"
+text = "Hold a design review of this failure mode with a second engineer"
+tags = ["review", "design"]
+precedence = "eliminate"
+applies_when = { band_at_least = "review" }
+required_when = { band_at_least = "review", level_in = ["technical_plan", "implementation"] }
+
+[[actions]]
+id = "prevention-before-detection"
+text = "Prevent the failure by design before relying on detection"
+tags = ["design"]
+precedence = "prevent"
+applies_when = { band_at_least = "review" }
+required_when = { band_at_least = "review", mitigation_kinds_missing = ["prevention"] }

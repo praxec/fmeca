@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "business-critical",
-    "hash": "1efe3caf5c8f33eea159ecfef99326a58df8149e5ab5e402a29c709b07af6d95",
+    "hash": "b7935023618e4565aad8f8ab8fd04f564d093ad0ffb179402164c2ebd2cf6a53",
     "class": "business-critical",
     "matrix_derived_from": "qualitative3x3",
     "source": "preset"
@@ -60,7 +60,7 @@
           "required": false,
           "why": [
             "band review rank 2 ≥ 2",
-            "no prevention mitigation"
+            "no implemented prevention mitigation"
           ],
           "covered_by": []
         },
@@ -138,7 +138,7 @@
           "why": [
             "band review ≥ review",
             "required: band review ≥ review",
-            "required: no prevention mitigation"
+            "required: no implemented prevention mitigation"
           ],
           "covered_by": []
         },
@@ -153,7 +153,7 @@
           "why": [
             "band review rank 2 ≥ 1",
             "domain runtime",
-            "no detection mitigation"
+            "no implemented detection mitigation"
           ],
           "covered_by": []
         },

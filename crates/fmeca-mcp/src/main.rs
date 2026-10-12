@@ -118,8 +118,13 @@ fn run_suggest(args: SuggestArgs) -> anyhow::Result<()> {
 }
 
 /// Build the evaluator's [`fmeca_policy::Subject`] from the session or file.
+/// A session is read from an existing state dir only: a missing one is an
+/// error, never created (suggest is read-only).
 fn build_subject(args: &SuggestArgs, state_dir: &Path) -> Result<fmeca_policy::Subject, String> {
     if let Some(session_id) = &args.session_id {
+        if !state_dir.is_dir() {
+            return Err(format!("no state dir at {}", state_dir.display()));
+        }
         let store = FilesystemStore::new(state_dir).map_err(|error| error.to_string())?;
         let engine = Engine::new(Arc::new(store));
         let state = engine
@@ -162,6 +167,10 @@ fn policy_project_dir(state_dir: &Path) -> Option<PathBuf> {
 }
 
 /// `policy validate <file>`: print `ok <name> <hash>` or fail with exit 2.
+///
+/// Besides parsing and validating, checks what loading it from
+/// `.fmeca/policies/` would: the file stem is a valid policy name that no
+/// built-in preset shadows, and the policy's `name` equals the stem.
 fn run_policy_validate(file: &Path) -> anyhow::Result<()> {
     let text = match std::fs::read_to_string(file) {
         Ok(text) => text,
@@ -174,11 +183,27 @@ fn run_policy_validate(file: &Path) -> anyhow::Result<()> {
     if let Err(error) = fmeca_policy::validate(&policy) {
         fail(error);
     }
+    let stem = file
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    if let Some(error) = fmeca_mcp::suggest::unusable_policy_stem(&stem) {
+        fail(error);
+    }
+    if policy.name != stem {
+        fail(format!(
+            "INVALID_POLICY: name: `{}` must equal the file name '{stem}'",
+            policy.name
+        ));
+    }
     println!("ok {} {}", policy.name, fmeca_policy::policy_hash(&policy));
     Ok(())
 }
 
-/// `policy list [--dir <state-dir>]`: `<source> <name> <hash> <class>` lines.
+/// `policy list [--dir <state-dir>]`: one `<source> <name> <hash> <class>`
+/// row per preset and per project `*.toml` file, matching MCP `policy.list`.
+/// A project file that does not load is a row `project <stem> - - <ERROR>`
+/// (including one shadowed by a preset); none is dropped. Always exits 0.
 fn run_policy_list(dir: Option<PathBuf>) -> anyhow::Result<()> {
     for name in fmeca_policy::PRESET_NAMES {
         if let Some(loaded) = fmeca_policy::preset(name) {
@@ -186,31 +211,24 @@ fn run_policy_list(dir: Option<PathBuf>) -> anyhow::Result<()> {
         }
     }
     let state_dir = dir.unwrap_or_else(resolve_state_dir);
-    if let Some(policies) = policy_project_dir(&state_dir) {
-        let mut names: Vec<String> = std::fs::read_dir(&policies)
-            .map(|entries| {
-                entries
-                    .filter_map(Result::ok)
-                    .filter_map(|entry| policy_stem(&entry.path()))
-                    .collect()
-            })
-            .unwrap_or_default();
-        names.sort();
-        names.dedup();
-        for name in names {
-            // Presets resolve first, so a project file with a preset stem can
-            // never be used; show it rather than its shadowed contents.
-            if fmeca_policy::PRESET_NAMES.contains(&name.as_str()) {
-                println!("project {name} - shadowed-by-preset");
-                continue;
-            }
-            match fmeca_policy::load_project_policy(&policies, &name) {
-                Ok(loaded) => print_policy_row("project", &loaded),
-                Err(error) => eprintln!("{error}"),
-            }
+    for (stem, loaded) in fmeca_mcp::suggest::project_policies(&state_dir) {
+        match loaded {
+            Ok(loaded) => print_policy_row("project", &loaded),
+            Err(error) => println!("project {stem} - - {}", policy_list_error(&stem, &error)),
         }
     }
     Ok(())
+}
+
+/// A `policy list` error cell that names the file stem: an `INVALID_POLICY`
+/// gains it after the code; the other errors already start with it.
+fn policy_list_error(stem: &str, error: &fmeca_policy::PolicyError) -> String {
+    match error {
+        fmeca_policy::PolicyError::Invalid { field, reason } => {
+            format!("INVALID_POLICY: {stem}: {field}: {reason}")
+        }
+        other => other.to_string(),
+    }
 }
 
 fn print_policy_row(source: &str, loaded: &fmeca_policy::LoadedPolicy) {
@@ -218,13 +236,6 @@ fn print_policy_row(source: &str, loaded: &fmeca_policy::LoadedPolicy) {
         "{source} {} {} {}",
         loaded.policy.name, loaded.hash, loaded.policy.class
     );
-}
-
-/// A policy file stem, when `path` is a `<valid-name>.toml`.
-fn policy_stem(path: &Path) -> Option<String> {
-    let stem = path.file_stem().and_then(|stem| stem.to_str())?;
-    let is_toml = path.extension().and_then(|ext| ext.to_str()) == Some("toml");
-    (is_toml && fmeca_policy::valid_policy_name(stem)).then(|| stem.to_string())
 }
 
 /// Serve MCP over stdio using the resolved state dir. This is the no-argument

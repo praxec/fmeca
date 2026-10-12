@@ -15,9 +15,9 @@ use fmeca::{
 };
 use fmeca_policy::presets::{PRESET_NAMES, builtin_actions, preset, resolve};
 use fmeca_policy::{
-    Accepted, Conditions, Date, KernelGate, LoadedPolicy, PolicyError, PolicySource,
-    STANDARD_BAND_COUNT, Subject, SubjectFm, SubjectMitigation, evaluate, parse_date, parse_policy,
-    policy_hash, subject_from_analysis, subject_from_state, validate,
+    Accepted, Conditions, Confidence, Date, KernelGate, LoadedPolicy, PolicyError, PolicySource,
+    STANDARD_BAND_COUNT, Subject, SubjectFm, SubjectMitigation, Suggestions, evaluate, parse_date,
+    parse_policy, policy_hash, subject_from_analysis, subject_from_state, validate,
 };
 
 fn as_of() -> Date {
@@ -310,6 +310,8 @@ struct ParityFixture {
     input: Vec<AnalyzeInput>,
     /// `(failure-mode id, Accepted | Excluded)`.
     dispositions: Vec<(&'static str, Disposition)>,
+    /// `(mitigation id, status, evidence)`, recorded on the session path only.
+    resolutions: Vec<(&'static str, MitigationStatus, Vec<ResolutionEvidence>)>,
 }
 
 impl ParityFixture {
@@ -319,7 +321,18 @@ impl ParityFixture {
             strategy,
             input,
             dispositions: Vec::new(),
+            resolutions: Vec::new(),
         }
+    }
+
+    fn resolved(
+        mut self,
+        mitigation_id: &'static str,
+        status: MitigationStatus,
+        evidence: Vec<ResolutionEvidence>,
+    ) -> Self {
+        self.resolutions.push((mitigation_id, status, evidence));
+        self
     }
 
     fn with(mut self, id: &'static str, disposition: Disposition) -> Self {
@@ -377,6 +390,21 @@ impl ParityFixture {
                     )
                     .unwrap();
             }
+        }
+        for (id, status, evidence) in &self.resolutions {
+            engine
+                .set_mitigation_status(
+                    SID,
+                    fmeca::MitigationStatusChange {
+                        session_id: SID.into(),
+                        mitigation_id: (*id).into(),
+                        status: *status,
+                        evidence: evidence.clone(),
+                        note: None,
+                        at: Some("2026-10-01T00:00:00Z".into()),
+                    },
+                )
+                .unwrap();
         }
         for (id, disposition) in &self.dispositions {
             engine
@@ -483,7 +511,10 @@ fn parity_fixtures() -> Vec<ParityFixture> {
                 LOW_3,
             )],
         ),
-        ParityFixture::new("3x3-unscored", Q3, vec![unscored]),
+        ParityFixture::new("3x3-unscored", Q3, vec![unscored.clone()]),
+        // Accepted but unscored: 0.1 readiness raises no CLARIFY (not open).
+        ParityFixture::new("3x3-accepted-unscored", Q3, vec![unscored])
+            .with("fm-unscored", Disposition::Accepted),
         ParityFixture::new("3x3-empty", Q3, Vec::new()),
         ParityFixture::new("5x5-low", N5, vec![afm("fm-low", LOW_5.0, LOW_5.1)]),
         ParityFixture::new(
@@ -594,6 +625,33 @@ fn compat_preset_matches_readiness_on_all_fixtures() {
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
+/// I1: an accepted, unscored failure mode is ready under 0.1 readiness, and
+/// `compat-0.1` (`unscored_fails = false`) passes it too.
+#[test]
+fn compat_passes_accepted_unscored_session_that_readiness_passes() {
+    let fixture = parity_fixtures()
+        .into_iter()
+        .find(|f| f.name == "3x3-accepted-unscored")
+        .expect("fixture");
+    let state = fixture.session();
+    let compat = preset("compat-0.1").expect("compat preset");
+    let pass = evaluate(&subject_from_state(&state), &compat, as_of())
+        .unwrap()
+        .signoff
+        .pass;
+    assert_eq!((state.readiness.ready, pass), (true, true));
+}
+
+#[test]
+fn only_compat_turns_off_unscored_fails() {
+    let off: Vec<&str> = PRESET_NAMES
+        .iter()
+        .copied()
+        .filter(|name| preset(name).is_some_and(|lp| !lp.policy.signoff.unscored_fails))
+        .collect();
+    assert_eq!(off, vec!["compat-0.1"]);
+}
+
 /// With the kernel gate switched off, compat-0.1's band rule alone must equal
 /// the kernel's residual rule: no open (not accepted, not excluded) failure
 /// mode with a Medium or High residual. Fixtures with an unscored failure mode
@@ -633,6 +691,182 @@ fn compat_band_verdict_matches_kernel_band_rule() {
         }
     }
     assert!(mismatches.is_empty(), "{mismatches:#?}");
+}
+
+// --- the kernel gate carries hygiene, not the residual zone (C1) -------------
+
+/// One open, unmitigated, fully described failure mode at 3×3 severity
+/// `data_loss` × probability `rare_edge_case`: kernel Medium (a RESIDUAL
+/// blocker), `standard` `compensate`, `prototype` `report`.
+fn medium_analysis() -> Vec<AnalyzeInput> {
+    vec![afm("fm-mid", "data_loss", "rare_edge_case")]
+}
+
+/// The sign-off of `medium_analysis` under `preset_name`, through the real
+/// `fmeca::analyze` kernel gate.
+fn medium_signoff(preset_name: &str) -> fmeca_policy::SignoffVerdict {
+    let subject =
+        subject_from_analysis(MatrixStrategy::Qualitative3x3, &medium_analysis()).unwrap();
+    let loaded = preset(preset_name).expect("preset");
+    evaluate(&subject, &loaded, as_of()).unwrap().signoff
+}
+
+#[test]
+fn standard_passes_unmitigated_compensate_band_with_real_kernel_gate() {
+    let signoff = medium_signoff("standard");
+    assert!(signoff.pass, "{:?}", signoff.reasons);
+}
+
+#[test]
+fn prototype_passes_unmitigated_report_band_with_real_kernel_gate() {
+    let signoff = medium_signoff("prototype");
+    assert!(signoff.pass, "{:?}", signoff.reasons);
+}
+
+#[test]
+fn kernel_gate_leaves_out_residual_blockers() {
+    let subject =
+        subject_from_analysis(MatrixStrategy::Qualitative3x3, &medium_analysis()).unwrap();
+    assert_eq!(
+        subject.kernel_gate,
+        KernelGate {
+            ready: true,
+            blockers: Vec::new()
+        }
+    );
+}
+
+#[test]
+fn kernel_gate_keeps_hygiene_blockers() {
+    // Low residual, but fail_fast only: the kernel's DISCIPLINE blocker stays.
+    let input = vec![mitigated_afm(
+        "fm-ff",
+        ("data_loss", "happens_in_normal_use"),
+        MitigationKind::FailFast,
+        ("cosmetic", "rare_edge_case"),
+    )];
+    let subject = subject_from_analysis(MatrixStrategy::Qualitative3x3, &input).unwrap();
+    assert_eq!(
+        (
+            subject.kernel_gate.ready,
+            subject.kernel_gate.blockers.len()
+        ),
+        (false, 1)
+    );
+}
+
+// --- the fallback threshold is monotone in the claimed reduction (C2) --------
+
+/// The first 5×5 cell (row order) of `band` in `preset_name`.
+fn cell_of(preset_name: &str, band: &str) -> (u8, u8) {
+    let loaded = preset(preset_name).expect("preset");
+    let cells = &loaded.policy.matrices["nasa8004_5x5"].cells;
+    cells
+        .iter()
+        .enumerate()
+        .find_map(|(s, row)| {
+            row.iter()
+                .position(|b| b == band)
+                .map(|p| (s as u8 + 1, p as u8 + 1))
+        })
+        .expect("band has a cell")
+}
+
+/// Evidence reaching exactly `confidence`.
+fn evidence_at(confidence: Confidence) -> Vec<ResolutionEvidence> {
+    use fmeca::{EvidenceBasis as B, EvidenceKind as K};
+    match confidence {
+        Confidence::C0 => Vec::new(),
+        Confidence::C1 => vec![evidence(K::File, None)],
+        Confidence::C2 => vec![evidence(K::Commit, None)],
+        Confidence::C3 => vec![evidence(K::Test, None)],
+        Confidence::C4 => vec![evidence(K::Url, Some(B::OperationalUse))],
+    }
+}
+
+/// One failure mode with inherent `from` and an implemented prevention
+/// claiming `to`, its evidence at `confidence`, evaluated under `preset_name`
+/// on the 5×5 strategy.
+fn claimed(preset_name: &str, from: &str, to: &str, confidence: Confidence) -> Suggestions {
+    let mut fm = open_fm("fm1", Domain::Runtime, false, cell_of(preset_name, from));
+    let residual = cell_of(preset_name, to);
+    fm.residual = Some(residual);
+    fm.mitigations.push(mitigation(
+        "m1",
+        MitigationKind::Prevention,
+        MitigationStatus::Implemented,
+        residual,
+        evidence_at(confidence),
+    ));
+    let subject = subject(MatrixStrategy::Nasa8004_5x5, None, vec![fm]);
+    evaluate(&subject, &preset(preset_name).expect("preset"), as_of()).unwrap()
+}
+
+#[test]
+fn claimed_reduction_to_lowest_band_needs_the_left_bands_evidence_under_standard() {
+    // Leaving `review` needs C2; C1 evidence falls back to `review`.
+    let s = claimed("standard", "review", "none", Confidence::C1);
+    assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("review"));
+}
+
+#[test]
+fn claimed_reduction_to_lowest_band_needs_the_left_bands_evidence_under_safety_critical() {
+    // Leaving `high` needs C3; C2 evidence falls back to `high`.
+    let s = claimed("safety-critical", "high", "low", Confidence::C2);
+    assert_eq!(s.failure_modes[0].effective_band.as_deref(), Some("high"));
+}
+
+#[test]
+fn full_reduction_with_sufficient_evidence_passes() {
+    let s = claimed("safety-critical", "high", "low", Confidence::C3);
+    assert!(s.signoff.pass, "{:?}", s.signoff.reasons);
+}
+
+/// The lowest confidence at which a claimed `from` → `to` reduction counts
+/// (no fallback); 5 when even C4 falls back.
+fn needed_confidence(preset_name: &str, from: &str, to: &str) -> usize {
+    const LADDER: [Confidence; 5] = [
+        Confidence::C0,
+        Confidence::C1,
+        Confidence::C2,
+        Confidence::C3,
+        Confidence::C4,
+    ];
+    LADDER
+        .iter()
+        .position(|&c| {
+            claimed(preset_name, from, to, c).failure_modes[0]
+                .fallback
+                .is_none()
+        })
+        .unwrap_or(LADDER.len())
+}
+
+/// For every preset with its own S×P bands (`confidence-view` takes its
+/// fallback from `standard`), every inherent band and every pair of lower
+/// residual bands: the bigger claimed reduction never needs less evidence.
+#[test]
+fn fallback_threshold_is_monotone_in_claimed_reduction() {
+    let mut violations = Vec::new();
+    for name in PRESET_NAMES.iter().filter(|n| **n != "confidence-view") {
+        let mut bands = preset(name).expect("preset").policy.bands;
+        bands.sort_by_key(|b| b.rank);
+        for (i, inherent) in bands.iter().enumerate() {
+            for (j, bigger) in bands[..i].iter().enumerate() {
+                for smaller in &bands[j + 1..i] {
+                    let big = needed_confidence(name, &inherent.id, &bigger.id);
+                    let small = needed_confidence(name, &inherent.id, &smaller.id);
+                    if big < small {
+                        violations.push(format!(
+                            "{name}: {} → {} needs C{big} < {} → {} needs C{small}",
+                            inherent.id, bigger.id, inherent.id, smaller.id
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    assert!(violations.is_empty(), "{violations:#?}");
 }
 
 // --- safety-critical against MIL-STD-882E Table III --------------------------
@@ -786,6 +1020,32 @@ fn business_critical_single_point_covered_by_implemented_prevention() {
             .required_uncovered
             .iter()
             .any(|(_, action)| action == "mitigate-single-point")
+    );
+}
+
+#[test]
+fn planned_prevention_does_not_lift_prevention_before_detection() {
+    // business-critical `review` (3×3 worst cell) with only a planned
+    // prevention: a plan is not coverage, so prevention is still missing.
+    let mut fm = open_fm("fm1", Domain::Runtime, false, (3, 3));
+    fm.residual = Some((1, 1));
+    fm.mitigations.push(mitigation(
+        "m1",
+        MitigationKind::Prevention,
+        MitigationStatus::Planned,
+        (1, 1),
+        Vec::new(),
+    ));
+    let s = evaluate(
+        &subject(MatrixStrategy::Qualitative3x3, None, vec![fm]),
+        &preset("business-critical").expect("preset"),
+        as_of(),
+    )
+    .unwrap();
+    assert!(
+        s.rollups
+            .required_uncovered
+            .contains(&("fm1".to_string(), "prevention-before-detection".to_string()))
     );
 }
 
@@ -997,18 +1257,66 @@ fn golden_mixed() -> Subject {
         accepted: None,
         mitigations: Vec::new(),
     };
-    subject(
+    // Worst cell claimed down to the best by an implemented prevention with
+    // commit evidence (C2): enough to leave `standard`'s `review` (C2), not
+    // `business-critical`'s `review` or `safety-critical`'s `high` (C3).
+    let mut claimed = open_fm("fm-claimed", Domain::Runtime, false, (5, 5));
+    claimed.residual = Some((1, 1));
+    claimed.mitigations.push(mitigation(
+        "m1",
+        MitigationKind::Prevention,
+        MitigationStatus::Implemented,
+        (1, 1),
+        vec![evidence(fmeca::EvidenceKind::Commit, None)],
+    ));
+    let mut mixed = subject(
         MatrixStrategy::Nasa8004_5x5,
         None,
-        vec![accepted, excluded, unscored],
-    )
+        vec![accepted, claimed, excluded, unscored],
+    );
+    // The kernel's own verdict on an open unscored failure mode.
+    mixed.kernel_gate = KernelGate {
+        ready: false,
+        blockers: vec!["CLARIFY: failure mode 'fm-unscored' is missing cause/effect/score".into()],
+    };
+    mixed
 }
 
-fn golden_fixtures() -> [(&'static str, Subject); 3] {
+/// A real session through the engine, so its kernel gate is the kernel's own
+/// (not a stub): `fm-mid` is an unmitigated kernel-Medium failure mode (a
+/// RESIDUAL blocker the gate leaves out), and `fm-fixed` a High one prevented
+/// down to Low by an implemented mitigation with test evidence (C3).
+fn golden_session() -> Subject {
+    let fixture = ParityFixture::new(
+        "golden-session",
+        MatrixStrategy::Qualitative3x3,
+        vec![
+            afm("fm-mid", "data_loss", "rare_edge_case"),
+            mitigated_afm(
+                "fm-fixed",
+                ("data_loss", "happens_in_normal_use"),
+                MitigationKind::Prevention,
+                ("cosmetic", "rare_edge_case"),
+            ),
+        ],
+    )
+    .resolved(
+        "fm-fixed-m1",
+        MitigationStatus::Implemented,
+        vec![evidence(fmeca::EvidenceKind::Test, None)],
+    );
+    subject_from_state(&fixture.session())
+}
+
+/// Every golden fixture. `session` carries a real kernel gate; `mixed` stubs
+/// the kernel's CLARIFY blocker for its open unscored failure mode; the others
+/// stub a ready, empty one.
+fn golden_fixtures() -> [(&'static str, Subject); 4] {
     [
         ("open", golden_open()),
         ("mitigated", golden_mitigated()),
         ("mixed", golden_mixed()),
+        ("session", golden_session()),
     ]
 }
 
@@ -1045,37 +1353,37 @@ fn golden_for(preset_name: &str) -> Vec<String> {
 }
 
 #[test]
-fn golden_compat_preset_matches_three_fixtures() {
+fn golden_compat_preset_matches_its_golden_fixtures() {
     let mismatches = golden_for("compat-0.1");
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
-fn golden_prototype_preset_matches_three_fixtures() {
+fn golden_prototype_preset_matches_its_golden_fixtures() {
     let mismatches = golden_for("prototype");
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
-fn golden_standard_preset_matches_three_fixtures() {
+fn golden_standard_preset_matches_its_golden_fixtures() {
     let mismatches = golden_for("standard");
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
-fn golden_business_critical_preset_matches_three_fixtures() {
+fn golden_business_critical_preset_matches_its_golden_fixtures() {
     let mismatches = golden_for("business-critical");
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
-fn golden_safety_critical_preset_matches_three_fixtures() {
+fn golden_safety_critical_preset_matches_its_golden_fixtures() {
     let mismatches = golden_for("safety-critical");
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
-fn golden_confidence_view_preset_matches_three_fixtures() {
+fn golden_confidence_view_preset_matches_its_golden_fixtures() {
     let mismatches = golden_for("confidence-view");
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }

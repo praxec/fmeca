@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "prototype",
-    "hash": "ef4b146c21b18941dee3ec0713107ee6145f9fca6a886342b7dd74ec46bdf650",
+    "hash": "c484324044631012c49e90a86e01c8c26bc29f770e2320bbad4e60008ef76554",
     "class": "prototype",
     "matrix_derived_from": "nasa8004_5x5",
     "source": "preset"
@@ -49,7 +49,7 @@
           "required": false,
           "why": [
             "band remediate rank 2 ≥ 2",
-            "no prevention mitigation"
+            "no implemented prevention mitigation"
           ],
           "covered_by": []
         },
@@ -109,7 +109,7 @@
           "why": [
             "band remediate rank 2 ≥ 1",
             "domain runtime",
-            "no detection mitigation"
+            "no implemented detection mitigation"
           ],
           "covered_by": []
         },
@@ -251,6 +251,20 @@
       ]
     },
     {
+      "id": "fm-claimed",
+      "inherent_band": "remediate",
+      "residual_band": "none",
+      "effective_band": "none",
+      "confidence": "C2",
+      "fallback": null,
+      "status": {
+        "state": "open",
+        "suggested": "close"
+      },
+      "rationale_needed": false,
+      "actions": []
+    },
+    {
       "id": "fm-unscored",
       "inherent_band": null,
       "residual_band": null,
@@ -273,14 +287,17 @@
   ],
   "rollups": {
     "by_band": {
+      "none": 1,
       "remediate": 1,
       "unscored": 1
     },
     "by_confidence": {
-      "C0": 2
+      "C0": 2,
+      "C2": 1
     },
     "by_status": {
       "accepted": 1,
+      "open": 1,
       "unscored": 1
     },
     "required_uncovered": [],
@@ -293,7 +310,8 @@
   "signoff": {
     "pass": false,
     "reasons": [
-      "fm-unscored: unscored"
+      "fm-unscored: unscored",
+      "kernel: CLARIFY: failure mode 'fm-unscored' is missing cause/effect/score"
     ]
   }
 }

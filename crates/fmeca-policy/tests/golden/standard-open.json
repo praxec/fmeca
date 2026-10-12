@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "standard",
-    "hash": "0b661c8483ccd4ce55cee0e480e0817ccbac3e1c408b7b3c42c46ae308a25208",
+    "hash": "a4b81cd0e593360d0049d2b76bc2abf2aaec374ca34bb345d2d4982a3f15e600",
     "class": "standard",
     "matrix_derived_from": "qualitative3x3",
     "source": "preset"
@@ -61,7 +61,7 @@
           "required": false,
           "why": [
             "band review rank 2 ≥ 2",
-            "no prevention mitigation"
+            "no implemented prevention mitigation"
           ],
           "covered_by": []
         },
@@ -121,7 +121,7 @@
           "why": [
             "band review rank 2 ≥ 1",
             "domain runtime",
-            "no detection mitigation"
+            "no implemented detection mitigation"
           ],
           "covered_by": []
         },

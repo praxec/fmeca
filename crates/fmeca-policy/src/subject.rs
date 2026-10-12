@@ -14,7 +14,7 @@ use fmeca::{
 };
 
 /// What the evaluator reads: the analysis's strategy and level, its failure
-/// modes, and the kernel's readiness gate.
+/// modes, and the kernel's readiness hygiene gate.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
     /// The analysis's matrix strategy; selects the policy matrix.
@@ -23,18 +23,50 @@ pub struct Subject {
     pub level: Option<AnalysisLevel>,
     /// Every failure mode, excluded ones included.
     pub failure_modes: Vec<SubjectFm>,
-    /// The kernel's readiness gate (`readiness.assess`).
+    /// The kernel's readiness hygiene gate (`readiness.assess` without its
+    /// residual-zone blockers; see [`KernelGate`]).
     pub kernel_gate: KernelGate,
 }
 
-/// The kernel's readiness verdict, carried so a policy's sign-off can include
-/// it (`signoff.include_kernel_gate`).
+/// The kernel's readiness **hygiene** verdict, carried so a policy's sign-off
+/// can include it (`signoff.include_kernel_gate`).
+///
+/// Built by [`subject_from_state`] and [`subject_from_analysis`] from the
+/// kernel's readiness blockers **minus its residual-zone blockers** (those
+/// starting with [`KERNEL_RESIDUAL_PREFIX`]): what remains is the kernel's
+/// hygiene — `CLARIFY` (an open failure mode missing cause, effect or score),
+/// `DISCIPLINE` (weak mitigation order) and `EMPTY`. The residual-zone rule
+/// ("no open Medium/High residual") is the policy's own band rule
+/// (`signoff.max_residual_band`), so carrying the kernel's would override it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct KernelGate {
-    /// The kernel's `ready`.
+    /// True iff `blockers` is empty (the kernel's `ready` with residual-zone
+    /// blockers disregarded).
     pub ready: bool,
-    /// The kernel's human-readable blockers; empty iff `ready`.
+    /// The kernel's hygiene blockers, human-readable; empty iff `ready`.
     pub blockers: Vec<String>,
+}
+
+/// The stable prefix of the kernel's residual-zone readiness blocker
+/// (`RESIDUAL: failure mode '<id>' still has <Medium|High> residual
+/// criticality`). The kernel exposes blockers only as strings, with no kind,
+/// so the prefix is the matching rule; [`KernelGate`] leaves these out.
+pub const KERNEL_RESIDUAL_PREFIX: &str = "RESIDUAL:";
+
+impl KernelGate {
+    /// The hygiene gate from the kernel's readiness blockers: residual-zone
+    /// blockers dropped, `ready` iff nothing remains.
+    pub fn from_kernel_blockers(blockers: &[String]) -> Self {
+        let blockers: Vec<String> = blockers
+            .iter()
+            .filter(|b| !b.starts_with(KERNEL_RESIDUAL_PREFIX))
+            .cloned()
+            .collect();
+        Self {
+            ready: blockers.is_empty(),
+            blockers,
+        }
+    }
 }
 
 /// One failure mode as the evaluator sees it.
@@ -97,6 +129,17 @@ impl SubjectMitigation {
     pub fn is_active(&self) -> bool {
         self.status != MitigationStatus::Abandoned
     }
+
+    /// True when the mitigation is implemented or verified: in place, not
+    /// merely planned. Only these cover an action or count for
+    /// `mitigation_kinds_missing` / `mitigation_kinds_present` (a plan is not
+    /// coverage).
+    pub fn is_in_place(&self) -> bool {
+        matches!(
+            self.status,
+            MitigationStatus::Implemented | MitigationStatus::Verified
+        )
+    }
 }
 
 /// Build a [`Subject`] from a projected session.
@@ -110,10 +153,7 @@ pub fn subject_from_state(state: &FmecaState) -> Subject {
             .iter()
             .map(|fm| subject_fm_from_view(strategy, fm))
             .collect(),
-        kernel_gate: KernelGate {
-            ready: state.readiness.ready,
-            blockers: state.readiness.blockers.clone(),
-        },
+        kernel_gate: KernelGate::from_kernel_blockers(&state.readiness.blockers),
     }
 }
 
@@ -180,10 +220,7 @@ pub fn subject_from_analysis(
         strategy,
         level: None,
         failure_modes,
-        kernel_gate: KernelGate {
-            ready: report.ready,
-            blockers: report.blockers,
-        },
+        kernel_gate: KernelGate::from_kernel_blockers(&report.blockers),
     })
 }
 

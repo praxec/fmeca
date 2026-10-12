@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "safety-critical",
-    "hash": "32265c1bbb2675666e6bcec4c7c7c0fcf66198db4cca2ae8dfee8143fb662f5c",
+    "hash": "f32567038baffc60c522009c15d6a64e302f1ffc4a49261d8d42768c40a480f2",
     "class": "safety-critical",
     "matrix_derived_from": "qualitative3x3",
     "source": "preset"
@@ -60,7 +60,7 @@
           "required": false,
           "why": [
             "band high rank 3 ≥ 2",
-            "no prevention mitigation"
+            "no implemented prevention mitigation"
           ],
           "covered_by": []
         },
@@ -120,7 +120,7 @@
           "why": [
             "band high ≥ serious",
             "required: band high ≥ serious",
-            "required: no prevention mitigation"
+            "required: no implemented prevention mitigation"
           ],
           "covered_by": []
         },
@@ -135,7 +135,7 @@
           "why": [
             "band high rank 3 ≥ 1",
             "domain runtime",
-            "no detection mitigation"
+            "no implemented detection mitigation"
           ],
           "covered_by": []
         },
@@ -263,7 +263,7 @@
         },
         {
           "id": "test-and-inspection-evidence",
-          "text": "Attach test and inspection evidence to the mitigations that reduce this hazard",
+          "text": "Attach test-level evidence (C3: a test, or better) to the mitigations that reduce this hazard; add inspection evidence too where it applies",
           "tags": [
             "test",
             "review"

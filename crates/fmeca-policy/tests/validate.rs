@@ -242,3 +242,28 @@ fn unknown_band_in_action_condition_is_rejected() {
         Some("actions[0].applies_when.band_in[1]")
     );
 }
+
+#[test]
+fn unscored_fails_defaults_true() {
+    let policy = parse_policy(MINIMAL).expect("MINIMAL parses");
+    assert!(policy.signoff.unscored_fails);
+}
+
+#[test]
+fn rank_at_least_above_highest_band_rank_is_rejected() {
+    let text = format!(
+        "{MINIMAL}\n[[actions]]\nid = \"probe\"\ntext = \"Probe\"\ntags = []\nprecedence = \"detect\"\nrequired_when = {{ rank_at_least = 2 }}\n"
+    );
+    assert_eq!(
+        invalid_field(check(&text)).as_deref(),
+        Some("actions[0].required_when.rank_at_least")
+    );
+}
+
+#[test]
+fn rank_at_least_at_highest_band_rank_is_accepted() {
+    let text = format!(
+        "{MINIMAL}\n[[actions]]\nid = \"probe\"\ntext = \"Probe\"\ntags = []\nprecedence = \"detect\"\napplies_when = {{ rank_at_least = 1 }}\n"
+    );
+    assert_eq!(check(&text), Ok(()));
+}

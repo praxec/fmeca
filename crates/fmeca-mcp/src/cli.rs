@@ -242,9 +242,12 @@ USAGE:
                       [--format json|markdown] [--dir D]
                               Suggest policy actions; exit 0 pass, 1 fail, 2 error
     fmeca-mcp policy validate <file>
-                              Print `ok <name> <hash>`, or INVALID_POLICY (exit 2)
+                              Print `ok <name> <hash>`, or the error (exit 2);
+                              `name` must equal the file stem, not a preset name
     fmeca-mcp policy list [--dir D]
-                              Print `<source> <name> <hash> <class>` lines
+                              Print `<source> <name> <hash> <class>` per policy;
+                              a project file that fails to load prints
+                              `project <stem> - - <ERROR>`
 
 The state dir is FMECA_STATE_DIR, else the nearest ancestor with a .fmeca/
 directory, else $XDG_DATA_HOME/fmeca-mcp or $HOME/.local/share/fmeca-mcp,

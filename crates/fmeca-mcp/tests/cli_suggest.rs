@@ -257,9 +257,117 @@ fn policy_list_marks_preset_shadowed_project_file() {
     let output = run(&["policy", "list", "--dir", state.to_str().unwrap()]);
     let out = stdout(&output);
     assert!(
-        out.lines()
-            .any(|line| line == "project standard - shadowed-by-preset")
+        out.lines().any(|line| line
+            == "project standard - - POLICY_NOT_FOUND: standard: shadowed by the built-in preset"),
+        "{out}"
     );
+}
+
+/// A `.fmeca/` state dir under `dir` holding `team.toml` (valid),
+/// `broken.toml` (invalid), `standard.toml` (shadowed) and `Bad_Name.toml`.
+fn mixed_policies_state(dir: &tempfile::TempDir) -> PathBuf {
+    let state = dir.path().join(".fmeca");
+    let policies = state.join("policies");
+    std::fs::create_dir_all(&policies).unwrap();
+    std::fs::write(policies.join("team.toml"), VALID_POLICY).unwrap();
+    std::fs::write(policies.join("broken.toml"), "bogus = 1\n").unwrap();
+    std::fs::write(
+        policies.join("standard.toml"),
+        VALID_POLICY.replace("name = \"team\"", "name = \"standard\""),
+    )
+    .unwrap();
+    std::fs::write(policies.join("Bad_Name.toml"), VALID_POLICY).unwrap();
+    state
+}
+
+#[test]
+fn policy_list_prints_an_invalid_project_file_as_an_error_row_naming_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = mixed_policies_state(&dir);
+    let output = run(&["policy", "list", "--dir", state.to_str().unwrap()]);
+    assert!(
+        stdout(&output)
+            .lines()
+            .any(|line| line.starts_with("project broken - - INVALID_POLICY: broken: ")),
+        "{}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn policy_list_with_unloadable_project_files_exits_0_without_stderr() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = mixed_policies_state(&dir);
+    let output = run(&["policy", "list", "--dir", state.to_str().unwrap()]);
+    assert_eq!(
+        (output.status.code(), stderr(&output)),
+        (Some(0), String::new())
+    );
+}
+
+/// The CLI prints one project row per file `policy.list` reports, in order.
+#[test]
+fn policy_list_project_rows_match_mcp_policy_list() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = mixed_policies_state(&dir);
+    let output = run(&["policy", "list", "--dir", state.to_str().unwrap()]);
+    let cli: Vec<String> = stdout(&output)
+        .lines()
+        .filter_map(|line| line.strip_prefix("project "))
+        .filter_map(|rest| rest.split(' ').next().map(str::to_string))
+        .collect();
+    let mcp = fmeca_mcp::suggest::policy_list(&state, json!({})).unwrap();
+    let names: Vec<String> = mcp["project"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["name"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(cli, names);
+}
+
+#[test]
+fn policy_validate_name_differing_from_file_stem_exits_2() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = write(&dir, "other.toml", VALID_POLICY);
+    let output = run(&["policy", "validate", file.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(2));
+}
+
+#[test]
+fn policy_validate_preset_stem_exits_2_as_shadowed() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = write(
+        &dir,
+        "standard.toml",
+        &VALID_POLICY.replace("name = \"team\"", "name = \"standard\""),
+    );
+    let output = run(&["policy", "validate", file.to_str().unwrap()]);
+    assert_eq!(
+        (output.status.code(), stderr(&output).trim().to_string()),
+        (
+            Some(2),
+            "POLICY_NOT_FOUND: standard: shadowed by the built-in preset".to_string()
+        )
+    );
+}
+
+#[test]
+fn policy_validate_accepts_the_skill_policy_template() {
+    let template = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../skills/fmeca-policy/policy-template.toml"
+    );
+    let output = run(&["policy", "validate", template]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+}
+
+#[test]
+fn suggest_session_with_missing_dir_exits_2_without_creating_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("no-such-state");
+    let output = run(&["suggest", "sess-pass", "--dir", missing.to_str().unwrap()]);
+    assert_eq!((output.status.code(), missing.exists()), (Some(2), false));
 }
 
 #[test]

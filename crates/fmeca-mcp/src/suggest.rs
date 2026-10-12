@@ -131,6 +131,51 @@ fn policy_row(loaded: &LoadedPolicy) -> Result<Value, McpError> {
     }))
 }
 
+/// Why a project file stem cannot name a usable policy, before reading it:
+/// it is shadowed by a built-in preset (presets resolve first) or is not a
+/// valid policy name. `None` when the stem is usable.
+pub fn unusable_policy_stem(stem: &str) -> Option<PolicyError> {
+    if preset(stem).is_some() {
+        Some(PolicyError::NotFound(format!(
+            "{stem}: shadowed by the built-in preset"
+        )))
+    } else if !valid_policy_name(stem) {
+        Some(PolicyError::NotFound(format!(
+            "{stem}: not a valid policy name"
+        )))
+    } else {
+        None
+    }
+}
+
+/// Every `*.toml` file in the project policies directory of `state_dir`, by
+/// stem in sorted order, each loaded or with the error that stops it loading.
+/// No file is dropped. Shared by `policy.list` and the CLI `policy list`.
+pub fn project_policies(state_dir: &Path) -> Vec<(String, Result<LoadedPolicy, PolicyError>)> {
+    let Some(dir) = project_policies_dir(state_dir) else {
+        return Vec::new();
+    };
+    let mut stems: Vec<String> = std::fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+        .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+        .collect();
+    stems.sort();
+    stems
+        .into_iter()
+        .map(|stem| {
+            let loaded = match unusable_policy_stem(&stem) {
+                Some(error) => Err(error),
+                None => load_project_policy(&dir, &stem),
+            };
+            (stem, loaded)
+        })
+        .collect()
+}
+
 /// `policy.list`: the built-in presets and the project's policy files. A
 /// project file that fails to load is listed with its `error`.
 pub fn policy_list(state_dir: &Path, args: Value) -> Result<Value, McpError> {
@@ -142,33 +187,11 @@ pub fn policy_list(state_dir: &Path, args: Value) -> Result<Value, McpError> {
         .collect::<Result<Vec<_>, _>>()?;
 
     let mut project = Vec::new();
-    if let Some(dir) = project_policies_dir(state_dir) {
-        let mut stems: Vec<String> = std::fs::read_dir(&dir)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x == "toml"))
-            .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-            .collect();
-        stems.sort();
-        for stem in stems {
-            let loaded = if preset(&stem).is_some() {
-                Err(PolicyError::NotFound(format!(
-                    "{stem}: shadowed by the built-in preset"
-                )))
-            } else if valid_policy_name(&stem) {
-                load_project_policy(&dir, &stem)
-            } else {
-                Err(PolicyError::NotFound(format!(
-                    "{stem}: not a valid policy name"
-                )))
-            };
-            project.push(match loaded {
-                Ok(p) => policy_row(&p)?,
-                Err(e) => json!({ "name": stem, "source": "project", "error": e.to_string() }),
-            });
-        }
+    for (stem, loaded) in project_policies(state_dir) {
+        project.push(match loaded {
+            Ok(p) => policy_row(&p)?,
+            Err(e) => json!({ "name": stem, "source": "project", "error": e.to_string() }),
+        });
     }
     Ok(json!({ "presets": presets, "project": project }))
 }
