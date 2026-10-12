@@ -33,8 +33,8 @@ mod validate;
 
 pub use confidence::{evidence_confidence, residual_confidence};
 pub use eval::{
-    ActionSuggestion, Date, DispositionStatus, ExcludedFm, Fallback, FmSuggestion, GroupBy,
-    PolicyRef, Rollups, SignoffVerdict, Suggestions, evaluate, group, parse_date,
+    ACCEPTANCE, ActionSuggestion, Date, DispositionStatus, ExcludedFm, Fallback, FmSuggestion,
+    GroupBy, PolicyRef, Rollups, SignoffVerdict, Suggestions, evaluate, group, parse_date,
 };
 pub use subject::{
     Accepted, KernelGate, Subject, SubjectFm, SubjectMitigation, subject_from_analysis,

@@ -489,13 +489,13 @@ fn signoff_fails_above_max_band_with_reason() {
 #[test]
 fn required_uncovered_fails_signoff() {
     let policy = policy_from(&TEST_POLICY.replace("class = \"standard\"", "class = \"critical\""));
-    // fm1 is accepted (so the band rule passes) but the required eliminate
-    // action is never covered.
-    let subject = subject(vec![accepted(fm("fm1", 3, 3), "2026-10-01T00:00:00Z")]);
+    // fm1 is open, so nothing covers the required eliminate action.
+    let subject = subject(vec![fm("fm1", 3, 3)]);
     let s = evaluate(&subject, &policy, as_of()).unwrap();
-    assert_eq!(
-        s.signoff.reasons,
-        vec!["fm1: required action `remove-path` is not covered".to_string()]
+    assert!(
+        s.signoff
+            .reasons
+            .contains(&"fm1: required action `remove-path` is not covered".to_string())
     );
 }
 
@@ -864,4 +864,40 @@ fn mitigation_kinds_present_needs_an_active_mitigation_of_the_kind() {
         vec![with_fail_fast, with_prevention, fm("fm3", 3, 3)],
     );
     assert_eq!(ids, vec!["fm1".to_string()]);
+}
+
+// --- acceptance satisfies an uncoverable required action ---------------------
+
+fn critical_policy() -> LoadedPolicy {
+    policy_from(&TEST_POLICY.replace("class = \"standard\"", "class = \"critical\""))
+}
+
+#[test]
+fn accepted_risk_satisfies_uncoverable_required_action() {
+    let subject = subject(vec![accepted(fm("fm1", 3, 3), "2026-10-01T00:00:00Z")]);
+    let s = evaluate(&subject, &critical_policy(), as_of()).unwrap();
+    assert_eq!(
+        s.failure_modes[0].actions[0].covered_by,
+        vec![fmeca_policy::ACCEPTANCE.to_string()]
+    );
+}
+
+#[test]
+fn unaccepted_risk_leaves_uncoverable_required_action_uncovered() {
+    let subject = subject(vec![fm("fm1", 3, 3)]);
+    let s = evaluate(&subject, &critical_policy(), as_of()).unwrap();
+    assert_eq!(
+        s.rollups.required_uncovered,
+        vec![("fm1".to_string(), "remove-path".to_string())]
+    );
+}
+
+#[test]
+fn acceptance_without_rationale_does_not_satisfy_required_action() {
+    let mut f = accepted(fm("fm1", 3, 3), "2026-10-01T00:00:00Z");
+    if let Some(a) = f.accepted.as_mut() {
+        a.rationale = "  ".into();
+    }
+    let s = evaluate(&subject(vec![f]), &critical_policy(), as_of()).unwrap();
+    assert!(s.failure_modes[0].actions[0].covered_by.is_empty());
 }

@@ -41,7 +41,9 @@
             "band review ≥ review",
             "required: band review ≥ review"
           ],
-          "covered_by": []
+          "covered_by": [
+            "acceptance"
+          ]
         },
         {
           "id": "simplify-design",
@@ -306,10 +308,6 @@
     "required_uncovered": [
       [
         "fm-acc",
-        "design-review"
-      ],
-      [
-        "fm-acc",
         "prevention-before-detection"
       ]
     ],
@@ -325,7 +323,6 @@
     "pass": false,
     "reasons": [
       "fm-acc: accepted risk in band `review` is overdue for review",
-      "fm-acc: required action `design-review` is not covered",
       "fm-acc: required action `prevention-before-detection` is not covered",
       "fm-unscored: unscored"
     ]

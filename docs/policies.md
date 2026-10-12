@@ -49,11 +49,13 @@ detection before a prevention. What is enforced is `required_when`.
 An action of precedence `prevent` / `detect` / `contain` is marked
 `covered_by` an implemented or verified mitigation of kind `prevention` /
 `detection` / `fail_fast`; `eliminate` and `procedure` are never auto-covered.
-A required action with no `covered_by` fails sign-off. A required `eliminate`
-or `procedure` action therefore keeps failing sign-off until its
-`required_when` stops holding (for example, the failure mode is mitigated
-below the band, or its evidence reaches the named confidence) — acceptance
-alone does not clear it.
+A required action with no `covered_by` fails sign-off. No mitigation kind
+covers a required `eliminate` or `procedure` action, so it is satisfied —
+reported as `covered_by: ["acceptance"]` — when the failure mode is
+**accepted** with a non-empty rationale **and** its effective band's
+`dispositions` include `accept`. Otherwise it stays in `required_uncovered`
+until its `required_when` stops holding (for example, the failure mode is
+mitigated below the band, or its evidence reaches the named confidence).
 
 `applies_when` / `required_when` keys (all optional; every key present must
 hold): `band_at_least`, `band_in`, `rank_at_least` (the effective band's rank
@@ -194,10 +196,10 @@ Required-action tailoring: `design-review` is **required** when the effective
 band is `review` (`required_when = { band_at_least = "review" }`). It is only
 suggested — and so only required — at the `technical_plan` and
 `implementation` levels (`applies_when` has `level_in`); an analysis with no
-level, or at another level, gets no design review from `standard`. Because
-`design-review` is an `eliminate` action, which nothing covers, a `review`
-failure mode at those levels fails sign-off until it is mitigated below
-`review`, even when accepted.
+level, or at another level, gets no design review from `standard`.
+`design-review` is an `eliminate` action, which no mitigation covers: an open
+`review` failure mode at those levels keeps it uncovered, and a reasoned
+acceptance (allowed in `review`) satisfies it (`covered_by: ["acceptance"]`).
 
 ### business-critical
 
@@ -217,7 +219,7 @@ Required actions, at every analysis level, when the effective band is
 
 | Action | `required_when` | Covered by |
 |---|---|---|
-| `design-review` | `band_at_least = "review"` | nothing (`eliminate`): mitigate below `review` |
+| `design-review` | `band_at_least = "review"` | a reasoned acceptance (`eliminate`); else mitigate below `review` |
 | `prevention-before-detection` | `band_at_least = "review"`, `mitigation_kinds_missing = ["prevention"]` | holds only while no active prevention exists |
 | `mitigate-single-point` | `band_at_least = "review"`, `single_point = true` | an implemented or verified `prevention` mitigation |
 
@@ -268,9 +270,9 @@ Required-action tailoring, at every analysis level:
 
 | Action | `required_when` | Covered by |
 |---|---|---|
-| `design-review` | `band_at_least = "serious"` | nothing (`eliminate`): mitigate below `serious` |
+| `design-review` | `band_at_least = "serious"` | a reasoned acceptance in `serious` (`eliminate`; `high` does not allow `accept`); else mitigate below `serious` |
 | `prevention-before-detection` | `band_at_least = "serious"`, `mitigation_kinds_missing = ["prevention"]` | holds only while no active prevention exists |
-| `test-and-inspection-evidence` | `band_at_least = "serious"`, `confidence_below = "C3"` | nothing (`procedure`): holds until the residual's evidence reaches C3 |
+| `test-and-inspection-evidence` | `band_at_least = "serious"`, `confidence_below = "C3"` | a reasoned acceptance in `serious` (`procedure`); else holds until the residual's evidence reaches C3 |
 
 `flag-procedural-only` is suggested (not required) on `serious` and `high`
 when mitigations exist but all of them are `fail_fast`

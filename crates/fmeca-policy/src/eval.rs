@@ -286,7 +286,9 @@ pub struct ActionSuggestion {
     /// The facts that matched `applies_when` (and `required_when`, prefixed
     /// `required: `).
     pub why: Vec<String>,
-    /// Active mitigations that already satisfy the action.
+    /// Active mitigations that already satisfy the action, or
+    /// [`ACCEPTANCE`] (`"acceptance"`) for a required `eliminate` /
+    /// `procedure` action satisfied by an allowed, reasoned acceptance.
     pub covered_by: Vec<String>,
 }
 
@@ -772,7 +774,12 @@ fn suggest(
             precedence: action.precedence,
             required: required.is_some(),
             why,
-            covered_by: covered_by(action.precedence, fm),
+            covered_by: if required.is_some() && acceptance_covers(action.precedence, fm, effective)
+            {
+                vec![ACCEPTANCE.to_string()]
+            } else {
+                covered_by(action.precedence, fm)
+            },
         });
     }
 
@@ -828,6 +835,22 @@ fn suggested_disposition(band: &Band, low_confidence: bool) -> DispositionKind {
             .copied()
             .unwrap_or(DispositionKind::Research)
     }
+}
+
+/// The `covered_by` marker for a required action satisfied by an acceptance.
+pub const ACCEPTANCE: &str = "acceptance";
+
+/// A required `eliminate` or `procedure` action, which no mitigation kind
+/// covers, is satisfied by a recorded acceptance with a non-empty rationale in
+/// an effective band whose dispositions allow `accept`.
+fn acceptance_covers(precedence: Precedence, fm: &SubjectFm, effective: Option<&Band>) -> bool {
+    matches!(precedence, Precedence::Eliminate | Precedence::Procedure)
+        && fm.disposition == fmeca::Disposition::Accepted
+        && fm
+            .accepted
+            .as_ref()
+            .is_some_and(|a| !a.rationale.trim().is_empty())
+        && effective.is_some_and(|b| b.dispositions.contains(&DispositionKind::Accept))
 }
 
 /// Implemented or verified mitigations of the kind that satisfies
