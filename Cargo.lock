@@ -354,6 +354,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "fmeca",
+ "fmeca-policy",
  "libc",
  "reqwest",
  "rig-core",
