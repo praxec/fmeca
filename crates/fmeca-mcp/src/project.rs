@@ -5,8 +5,8 @@
 //! logs; `check` replays every log and runs [`fmeca::validate_log`] over it so
 //! a bad merge is caught before it is trusted.
 
-use std::fs;
-use std::io;
+use std::fs::{self, OpenOptions};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use fmeca::{FilesystemStore, LogProblem, LogProblemKind, StateStore, validate_log};
@@ -72,11 +72,15 @@ pub fn init(project_root: &Path) -> io::Result<Vec<(PathBuf, FileOutcome)>> {
     let mut outcomes = Vec::new();
     for (name, content) in [("README.md", README), (".gitattributes", GITATTRIBUTES)] {
         let path = dir.join(name);
-        let outcome = if path.exists() {
-            FileOutcome::Unchanged
-        } else {
-            fs::write(&path, content)?;
-            FileOutcome::Created
+        // `create_new` fails on any existing entry, a dangling symlink included,
+        // so init never writes through a link.
+        let outcome = match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                file.write_all(content.as_bytes())?;
+                FileOutcome::Created
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => FileOutcome::Unchanged,
+            Err(error) => return Err(error),
         };
         outcomes.push((path, outcome));
     }

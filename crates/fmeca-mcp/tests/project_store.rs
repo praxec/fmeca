@@ -236,3 +236,15 @@ fn check_reports_duplicate_session_opened() {
         "stdout: {stdout}"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn init_does_not_follow_dangling_symlink() {
+    let root = tempfile::tempdir().unwrap();
+    let dir = root.path().join(PROJECT_DIR_NAME);
+    fs::create_dir_all(&dir).unwrap();
+    let target = root.path().join("elsewhere.md");
+    std::os::unix::fs::symlink(&target, dir.join("README.md")).unwrap();
+    init(root.path()).unwrap();
+    assert!(!target.exists());
+}
