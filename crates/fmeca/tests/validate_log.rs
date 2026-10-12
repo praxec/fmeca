@@ -67,6 +67,13 @@ fn status_change_for_unknown_mitigation_is_reported() {
 }
 
 #[test]
+fn second_session_opened_is_reported() {
+    // Two logs concatenated: each brings its own session_opened.
+    let events = vec![opened(), fm_added("fm-1"), opened(), fm_added("fm-2")];
+    assert_eq!(kinds(&events), vec![LogProblemKind::DuplicateSessionOpened]);
+}
+
+#[test]
 fn log_without_session_opened_is_reported() {
     let events = vec![fm_added("fm-1")];
     assert_eq!(kinds(&events), vec![LogProblemKind::MissingSessionOpened]);

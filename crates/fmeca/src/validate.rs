@@ -27,11 +27,14 @@ pub struct LogProblem {
 }
 
 /// The kinds of log problem. A disposition naming an unknown failure mode is
-/// `UnknownFailureMode`.
+/// `UnknownFailureMode`. A `session_opened` after the first one (two logs
+/// concatenated, for example by a union merge) is `DuplicateSessionOpened`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum LogProblemKind {
     MissingSessionOpened,
+    DuplicateSessionOpened,
     DuplicateFailureModeId,
     DuplicateMitigationId,
     UnknownFailureMode,
@@ -57,6 +60,7 @@ pub fn validate_log(session_id: &str, events: &[Event]) -> Vec<LogProblem> {
     let mut ids: HashSet<&str> = HashSet::new();
     let mut failure_modes: HashSet<&str> = HashSet::new();
     let mut mitigations: HashSet<&str> = HashSet::new();
+    let mut session_opened_seen = false;
 
     for (idx, event) in events.iter().enumerate() {
         let line = idx + 1;
@@ -71,7 +75,16 @@ pub fn validate_log(session_id: &str, events: &[Event]) -> Vec<LogProblem> {
             );
         }
         match event {
-            Event::SessionOpened { .. } => {}
+            Event::SessionOpened { .. } => {
+                if session_opened_seen {
+                    push(
+                        line,
+                        LogProblemKind::DuplicateSessionOpened,
+                        "session_opened appears again after the first one".to_string(),
+                    );
+                }
+                session_opened_seen = true;
+            }
             Event::FailureModeAdded { failure_mode } => {
                 let id = failure_mode.id.as_str();
                 if !ids.insert(id) {

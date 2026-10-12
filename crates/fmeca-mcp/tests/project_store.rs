@@ -199,3 +199,40 @@ fn check_ignores_non_jsonl_files() {
     fs::write(dir.path().join(".gitattributes"), "*.jsonl merge=union").unwrap();
     assert_eq!(check(dir.path()), Vec::new());
 }
+
+#[test]
+fn check_reports_duplicate_session_opened() {
+    // Two branches' logs for one session, opened with different strategies and
+    // concatenated (what a union merge of two fresh logs produces).
+    let a = tempfile::tempdir().unwrap();
+    append(a.path(), "svc-concept", &opened("svc-concept"));
+    let b = tempfile::tempdir().unwrap();
+    let nasa = Event::SessionOpened {
+        session_id: "svc-concept".to_string(),
+        matrix_strategy: MatrixStrategy::Nasa8004_5x5,
+        meta: SessionMeta::default(),
+    };
+    append(b.path(), "svc-concept", &nasa);
+    let merged = tempfile::tempdir().unwrap();
+    let log = |dir: &Path| fs::read_to_string(dir.join("svc-concept.jsonl")).unwrap();
+    fs::write(
+        merged.path().join("svc-concept.jsonl"),
+        log(a.path()) + &log(b.path()),
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_fmeca-mcp"))
+        .args(["check", "--dir"])
+        .arg(merged.path())
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    assert_eq!(
+        (
+            output.status.code(),
+            stdout.contains("line 2: duplicate_session_opened")
+        ),
+        (Some(1), true),
+        "stdout: {stdout}"
+    );
+}

@@ -136,10 +136,14 @@ fn format_problem(problem: LogProblem) -> String {
 fn kind_name(kind: LogProblemKind) -> &'static str {
     match kind {
         LogProblemKind::MissingSessionOpened => "missing_session_opened",
+        LogProblemKind::DuplicateSessionOpened => "duplicate_session_opened",
         LogProblemKind::DuplicateFailureModeId => "duplicate_failure_mode_id",
         LogProblemKind::DuplicateMitigationId => "duplicate_mitigation_id",
         LogProblemKind::UnknownFailureMode => "unknown_failure_mode",
         LogProblemKind::UnknownMitigation => "unknown_mitigation",
         LogProblemKind::SessionIdMismatch => "session_id_mismatch",
+        // `LogProblemKind` is `#[non_exhaustive]`; a kind added to the kernel
+        // later still prints until it gets its own name here.
+        _ => "log_problem",
     }
 }
