@@ -611,9 +611,17 @@ fn now_rfc3339() -> Result<String, McpError> {
 }
 
 /// One `session.list` row for a session that replayed.
+///
+/// Excluded failure modes (not credible) are left out of `failure_modes` and
+/// `by_standing`, as they are left out of the gates; `excluded` counts them.
 fn session_row(state: &FmecaState) -> Value {
     let (mut unmitigated, mut under_mitigated, mut acceptable) = (0usize, 0usize, 0usize);
+    let mut excluded = 0usize;
     for fmv in &state.failure_modes {
+        if fmv.disposition == Disposition::Excluded {
+            excluded += 1;
+            continue;
+        }
         match fmv.standing {
             Some(FailureModeStanding::Unmitigated) => unmitigated += 1,
             Some(FailureModeStanding::UnderMitigated) => under_mitigated += 1,
@@ -630,12 +638,13 @@ fn session_row(state: &FmecaState) -> Value {
         "aspect": meta.aspect,
         "scope_paths": meta.scope_paths,
         "parent": meta.parent,
-        "failure_modes": state.failure_modes.len(),
+        "failure_modes": state.failure_modes.len() - excluded,
         "by_standing": {
             "unmitigated": unmitigated,
             "under_mitigated": under_mitigated,
             "acceptable": acceptable,
         },
+        "excluded": excluded,
         "ready": readiness.ready,
         "ready_verified": readiness.verified.ready,
         "resolution": readiness.resolution,
@@ -806,8 +815,8 @@ pub fn tool_definitions() -> Vec<Tool> {
                 "List the analyses in the state dir (the project's .fmeca/ when there is one). \
                  Optional exact-match filters: level, aspect, parent. Returns {state_dir, \
                  sessions[]} sorted by session_id; each row is {session_id, title, level, \
-                 aspect, scope_paths, parent, failure_modes (count), by_standing{unmitigated, \
-                 under_mitigated, acceptable}, ready, ready_verified, resolution{planned, \
+                 aspect, scope_paths, parent, failure_modes (count, excluded ones left out), \
+                 by_standing{unmitigated, under_mitigated, acceptable}, excluded (count), ready, ready_verified, resolution{planned, \
                  implemented, verified, abandoned}, critical_items (count), accepted_risks \
                  (count)}. A log that fails to replay is listed as {session_id, error} instead \
                  of failing the call (such rows are kept whatever the filters).",

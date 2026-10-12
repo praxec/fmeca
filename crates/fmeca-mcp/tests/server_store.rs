@@ -333,6 +333,35 @@ fn session_list_reports_ready_verified() {
 }
 
 #[test]
+fn session_list_does_not_count_excluded_failure_modes() {
+    let (srv, _d) = server();
+    ok(&srv, "session.open", json!({ "session_id": "s" }));
+    add_high_fm(&srv, "s", "fm1", json!({}));
+    add_high_fm(&srv, "s", "fm2", json!({}));
+    ok(
+        &srv,
+        "append",
+        json!({
+            "variant": "set_failure_mode_disposition",
+            "session_id": "s",
+            "failure_mode_id": "fm1",
+            "disposition": "excluded",
+            "rationale": "not credible: the queue is bounded upstream",
+            "evidence": [{ "kind": "file", "reference": "src/queue.rs", "basis": "design" }]
+        }),
+    );
+    let row = &list(&srv, json!({}))["sessions"][0];
+    assert_eq!(
+        (
+            row["failure_modes"].clone(),
+            row["by_standing"]["unmitigated"].clone(),
+            row["excluded"].clone()
+        ),
+        (json!(1), json!(1), json!(1))
+    );
+}
+
+#[test]
 fn session_list_shows_broken_log_as_error_row() {
     let (srv, dir) = server();
     ok(&srv, "session.open", json!({ "session_id": "good" }));
