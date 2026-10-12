@@ -35,6 +35,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `fmeca` (the kernel) is republished at 0.2.0 alongside `fmeca-policy`, with
   no API change.
+- npm releases are published by the maintainer with `scripts/npm-release.sh`
+  (2FA one-time password, no stored token), from the tarball the release
+  attached. The release workflow's `npm publish` job runs only when the
+  repository variable `NPM_TRUSTED_PUBLISHING` is `true`.
 
 ### Fixed
 
