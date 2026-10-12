@@ -280,8 +280,7 @@ not recommended.
    }
    ```
 
-   For the binary use `"command": "/absolute/path/to/fmeca-mcp"` (see the `PATH`
-note below) and `"args": []`. For Docker use
+   For the binary use `"command": "fmeca-mcp"` and `"args": []`. For Docker use
    `"command": "docker"` and
    `"args": ["run", "-i", "--rm", "-e", "OPENROUTER_API_KEY", "ghcr.io/praxec/fmeca:0.1.0"]`.
    Cursor expands `${env:NAME}` in the `env` block, which also works when Cursor
@@ -317,8 +316,7 @@ note below) and `"args": []`. For Docker use
    }
    ```
 
-   For the binary use `"command": "/absolute/path/to/fmeca-mcp"` (see the `PATH`
-note below) and `"args": []`. For Docker use
+   For the binary use `"command": "fmeca-mcp"` and `"args": []`. For Docker use
    `"command": "docker"` and
    `"args": ["run", "-i", "--rm", "-e", "OPENROUTER_API_KEY", "ghcr.io/praxec/fmeca:0.1.0"]`.
    VS Code can also add it to your user profile with
@@ -361,8 +359,7 @@ note below) and `"args": []`. For Docker use
    }
    ```
 
-   For the binary use `"command": "/absolute/path/to/fmeca-mcp"` (see the `PATH`
-note below) and `"args": []`. For Docker use
+   For the binary use `"command": "fmeca-mcp"` and `"args": []`. For Docker use
    `"command": "docker"` and
    `"args": ["run", "-i", "--rm", "-e", "OPENROUTER_API_KEY", "ghcr.io/praxec/fmeca:0.1.0"]`.
 
