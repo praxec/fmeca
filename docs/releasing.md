@@ -10,9 +10,11 @@ Throughout, `X.Y.Z` is the new version and `vX.Y.Z` its tag.
 
 ## 1. Bump the version
 
-On a branch off `dev`, set the same version in the four files that carry it:
+On a branch off `dev`, set the same version in the five files that carry it:
 
 - `Cargo.toml`: `[workspace.package] version`.
+- `crates/fmeca-mcp/Cargo.toml`: the `version` of the `fmeca` dependency
+  (`fmeca = { path = "../fmeca", version = "X.Y.Z" }`).
 - `Cargo.lock`: run `cargo check` (or `cargo update -p fmeca -p fmeca-mcp`) so
   the lock file records the new version.
 - `server.json`: the top-level `version` and the tag of the OCI identifier
@@ -27,17 +29,22 @@ Then check them:
 scripts/check-version-sync.sh
 ```
 
-It fails when any `server.json` version or OCI tag, or the `npm/package.json`
-version, differs from `Cargo.toml`. The release workflow repeats the check
+It fails when any `server.json` version or OCI tag, the `npm/package.json`
+version, the `fmeca` dependency version in `crates/fmeca-mcp/Cargo.toml`, or
+the `fmeca`/`fmeca-mcp` entries in `Cargo.lock` differ from `Cargo.toml`. The release workflow repeats the check
 against the tag and refuses to build on a mismatch. Nothing else needs a
 version bump: the README writes `<version>` for a release tag instead of
 pinning one.
 
 ## 2. Update the CHANGELOG
 
-In [CHANGELOG.md](../CHANGELOG.md), rename `## [Unreleased]` to
-`## [X.Y.Z] - YYYY-MM-DD` and add a fresh empty `## [Unreleased]` above it.
-Follow Keep a Changelog: group entries under Added, Changed, Fixed and so on.
+In [CHANGELOG.md](../CHANGELOG.md), add a `## [X.Y.Z] - YYYY-MM-DD` section
+above the newest release section, listing the changes since that release, and
+add its link at the bottom of the file
+(`[X.Y.Z]: https://github.com/praxec/fmeca/releases/tag/vX.Y.Z`). If someone
+has opened a `## [Unreleased]` section in the meantime, rename it to the new
+version instead. Follow Keep a Changelog: group entries under Added, Changed,
+Fixed and so on.
 The date here is the planned release date; step 3 corrects it on the day.
 
 Open the bump as a pull request into `dev` and merge it once CI is green.
@@ -97,7 +104,8 @@ The `npm publish` job publishes the npm launcher (`npm/`, package
 job over GitHub OIDC, so the repository holds no npm token, and the package
 gets a provenance attestation. The job runs in the `npm` environment, which
 waits for a maintainer's approval. Approve it from the run page (**Review
-deployments**) as soon as the release is public. The launcher downloads the
+deployments**) as soon as the release is public (for 0.1.0, first follow
+[First release only](#first-release-only-010) below). The launcher downloads the
 GitHub release whose version equals its own, and until the publish the
 documented `npx -y @matthew-cochran/fmeca` and
 `npm install -g @matthew-cochran/fmeca` commands fail with a 404 from the
@@ -113,21 +121,46 @@ One-time setup: on npmjs.com, the package's
 **Settings → Trusted publishing** names GitHub Actions, the repository
 `praxec/fmeca`, the workflow `release.yml` and the environment `npm`; on
 GitHub, the `npm` environment has required reviewers and allows only `v*` tags.
-npm can only set up trusted publishing for a package that already exists, so
-the first version was published by hand.
 
 **The npm trusted publisher must name the workflow file exactly `release.yml` (cpm-planner 0.2.2's publish 404'd because it said `release.yaml`).**
 
-The first publish is a manual step. Build the tarball with `npm pack` in
-`npm/`, then, logged in to npm as an owner of the `@matthew-cochran` scope,
-publish it with 2FA:
+### First release only (0.1.0)
 
-```sh
-npm publish ./matthew-cochran-fmeca-0.1.0.tgz --access public   # prompts for the 2FA code
-```
+npm can only set up trusted publishing for a package that already exists, so
+0.1.0 is published by hand, from the tarball the release attached, before the
+`npm` job is approved:
 
-Only after that does the trusted publisher above exist and release.yml take
-over for every later version.
+1. Tag `v0.1.0` (step 4).
+2. The **aggregate metadata + publish** job attaches
+   `matthew-cochran-fmeca-0.1.0.tgz` and `npm-package.sha256` to the release.
+   The **npm publish** job then waits for approval in the `npm` environment;
+   do not approve it yet.
+3. Download both files and check the digest:
+
+   ```sh
+   mkdir -p /tmp/fmeca-npm && cd /tmp/fmeca-npm
+   gh release download v0.1.0 --repo praxec/fmeca \
+     --pattern 'matthew-cochran-fmeca-0.1.0.tgz' --pattern npm-package.sha256
+   sha256sum -c npm-package.sha256          # must print OK; stop if it does not
+   ```
+
+4. Logged in to npm (`npm login`) as an owner of the `@matthew-cochran` scope,
+   publish that tarball with 2FA:
+
+   ```sh
+   npm publish ./matthew-cochran-fmeca-0.1.0.tgz --access public   # prompts for the 2FA code
+   ```
+
+5. On npmjs.com, configure the trusted publisher for
+   `@matthew-cochran/fmeca`: GitHub Actions, repository `praxec/fmeca`,
+   workflow `release.yml`, environment `npm`.
+6. Approve the **npm publish** job. It skips the publish, because 0.1.0 is
+   already on npm, and runs the `npx -y @matthew-cochran/fmeca@0.1.0 --version`
+   verification.
+
+From 0.1.1 on, approving the job is the whole npm step.
+
+### Manual fallback
 
 If the job cannot publish (for example, trusted publishing is misconfigured),
 publish the same tarball by hand. You need to be logged in to npm
@@ -193,17 +226,40 @@ git checkout vX.Y.Z
 cargo publish -p fmeca --dry-run --locked
 cargo package -p fmeca --list --locked   # no docs/superpowers, .github or scripts
 cargo publish -p fmeca --locked
-# Wait for `fmeca X.Y.Z` to appear on crates.io, then:
-# skills/ is copied in as a generated packaging input (gitignored); see build.rs
-rm -rf crates/fmeca-mcp/skills && cp -R skills crates/fmeca-mcp/skills
-cargo publish -p fmeca-mcp --dry-run --locked --allow-dirty
-cargo publish --locked -p fmeca-mcp --allow-dirty
-rm -rf crates/fmeca-mcp/skills
+```
+
+Wait for `fmeca X.Y.Z` to appear on crates.io, then publish `fmeca-mcp`. Paste
+this block whole: it runs in a subshell that stops at the first failure, so
+nothing is published when the working tree has changes besides the copied
+skills (`--allow-dirty` must cover only those):
+
+```sh
+(
+  set -euo pipefail
+  # skills/ is copied in as a generated packaging input (gitignored); see build.rs
+  rm -rf crates/fmeca-mcp/skills && cp -R skills crates/fmeca-mcp/skills
+  dirty="$(git status --porcelain --untracked-files=all | grep -v ' crates/fmeca-mcp/skills/' || true)"
+  if [ -n "$dirty" ]; then
+    printf '%s\n' "$dirty"
+    echo "the working tree has changes besides crates/fmeca-mcp/skills/; not publishing" >&2
+    exit 1
+  fi
+  cargo publish -p fmeca-mcp --dry-run --locked --allow-dirty
+  cargo publish --locked -p fmeca-mcp --allow-dirty
+  rm -rf crates/fmeca-mcp/skills
+)
 ```
 
 Until this step runs, crates.io keeps serving the previous versions, which is
 why the README installs from the git tag. docs.rs builds the new versions on
 its own a few minutes after publishing.
+
+After the first release (once `fmeca` 0.1.0 is on crates.io), restore the full
+`fmeca-mcp` publish dry-run in CI: in the `package` job of
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml), replace
+`cargo package --locked --list -p fmeca-mcp --allow-dirty` with
+`cargo publish --dry-run --locked -p fmeca-mcp --allow-dirty` and drop the
+comment that explains the workaround. Open it as a pull request into `dev`.
 
 ## Rollback
 

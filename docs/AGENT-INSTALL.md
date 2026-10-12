@@ -37,8 +37,8 @@ curl -fsSL https://github.com/praxec/fmeca/releases/download/v0.1.0/install.sh |
 ```
 
 ```powershell
-# Windows (PowerShell)
-irm https://github.com/praxec/fmeca/releases/download/v0.1.0/install.ps1 | iex
+# Windows (PowerShell); -Version pins the release, as --version does above
+& ([scriptblock]::Create((irm https://github.com/praxec/fmeca/releases/download/v0.1.0/install.ps1))) -Version v0.1.0
 ```
 
 Then check it: `fmeca-mcp --version` prints `fmeca-mcp 0.1.0`.
@@ -130,7 +130,7 @@ tool on the example in the fmeca skill" and it should return the same report.
    # binary
    claude mcp add --transport stdio --scope user fmeca -- fmeca-mcp
    # Docker, analyses kept in the repo you launch from (see the .fmeca/ section)
-   claude mcp add --transport stdio --scope local fmeca -- docker run -i --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
+   claude mcp add --transport stdio --scope local fmeca -- docker run -i --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work -e FMECA_STATE_DIR=/work/.fmeca -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
    ```
 
    For the Docker variant use `--scope local`: the shell expands `$PWD` when you
@@ -179,7 +179,8 @@ Windows: `%APPDATA%\Claude\`) and restart the app:
 }
 ```
 
-For the binary use `"command": "fmeca-mcp"` and `"args": []`. For Docker use
+For the binary use `"command": "/absolute/path/to/fmeca-mcp"` (see the `PATH`
+note below) and `"args": []`. For Docker use
 `"command": "docker"` with
 `"args": ["run", "-i", "--rm", "ghcr.io/praxec/fmeca:0.1.0"]`; without a mount
 the state is lost when the container exits (see
@@ -198,7 +199,7 @@ macOS or Linux (`~/bin/fmeca-desktop.sh`, `chmod 700`; on Linux replace the
 #!/bin/sh
 OPENROUTER_API_KEY="$(security find-generic-password -s fmeca-openrouter -w)" || unset OPENROUTER_API_KEY
 export OPENROUTER_API_KEY
-exec fmeca-mcp
+exec /absolute/path/to/fmeca-mcp
 ```
 
 Windows (`fmeca-desktop.ps1`, key stored in Credential Manager, here read with
@@ -206,8 +207,12 @@ the CredentialManager module):
 
 ```powershell
 $env:OPENROUTER_API_KEY = (Get-StoredCredential -Target fmeca-openrouter).GetNetworkCredential().Password
-& fmeca-mcp
+& 'C:\absolute\path\to\fmeca-mcp.exe'
 ```
+
+Desktop launched from the GUI usually does not have your shell's `PATH`, so
+both scripts name `fmeca-mcp` by its absolute path: find it with
+`command -v fmeca-mcp` (PowerShell: `(Get-Command fmeca-mcp).Source`).
 
 Then point Desktop at the script: `"command": "/Users/you/bin/fmeca-desktop.sh"`
 with `"args": []` (on Windows, `"command": "powershell"` with
@@ -333,9 +338,12 @@ not recommended.
    name):
 
    ```sh
-   gemini mcp add -s user fmeca npx -y @matthew-cochran/fmeca
-   gemini mcp add -s user fmeca fmeca-mcp
+   gemini mcp add -s user fmeca -- npx -y @matthew-cochran/fmeca
+   gemini mcp add -s user fmeca -- fmeca-mcp
    ```
+
+   The `--` ends Gemini's own options, so it cannot read `-y` as one of its
+   flags.
 
    Or edit `~/.gemini/settings.json` (project: `.gemini/settings.json`):
 
@@ -420,11 +428,13 @@ A container only sees `.fmeca/` if the project is mounted. Use this as the
 in-repo variant:
 
 ```sh
-docker run -i --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
+docker run -i --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work -e FMECA_STATE_DIR=/work/.fmeca -e OPENROUTER_API_KEY ghcr.io/praxec/fmeca:0.1.0
 ```
 
-The `-w /work` makes the project root the working directory, so the server finds
-`.fmeca/` as above. **Without the mount, state goes to the container's own user
+The `-w /work` makes the project root the working directory, and
+`FMECA_STATE_DIR=/work/.fmeca` points the server at the repo's `.fmeca/` even
+before `fmeca-mcp init` has created it (the folder is created on first write).
+**Without the mount, state goes to the container's own user
 directory and is lost when the container exits.** `--user` runs the container as you, so the files it
 writes to `.fmeca/` are owned by you rather than by the image's own user.
 

@@ -12,7 +12,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - CLI: the `.fmeca/` project store. `fmeca-mcp init` scaffolds it with a
   README and a `.gitattributes` that sets `merge=union` on the event logs;
   `fmeca-mcp check` replays every log, runs `fmeca::validate_log` over it, and
-  names the duplicate ids a union merge can produce.
+  names the duplicate ids and the second `session_opened`
+  (`duplicate_session_opened`) a union merge can produce.
 - CLI: `fmeca-mcp skills install|uninstall --target <claude|codex|cursor|copilot|gemini|agents-md|all> (--project <dir> | --user)`
   installs the agent skills embedded in the binary into each tool's official
   skill and command locations (manifest-tracked, `--dry-run`, `--force`, an OS
@@ -22,7 +23,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   release binary for the host platform (cache and OS file lock) and runs it
   over stdio, forwarding arguments intact.
 - Server (`fmeca-mcp`): `session.list`, one row per analysis in the state dir,
-  with optional exact-match filters.
+  with optional exact-match filters. Excluded failure modes are left out of a
+  row's `failure_modes` and `by_standing` counts and counted in `excluded`.
 - Server (`fmeca-mcp`): the advisory `vet` tool (feature `jev`, on by
   default). It asks Jev, a calibrated judgment model on OpenRouter, four kinds
   of question about a session or a one-shot analysis: do the claimed
@@ -53,6 +55,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Kernel: mitigation resolution lifecycle. `Engine::set_mitigation_status`
   records `planned | implemented | verified | abandoned` with evidence and an
   optional `basis`. A `verified` status needs evidence that is not a note.
+  `ResolutionEvidence` rejects unknown fields, so a misspelled key such as
+  `basys` is an error rather than silently dropped.
   Each mitigation view gains `status`, `evidence` and `history`. Each failure
   mode gains `verified_residual_criticality`.
 - Kernel: failure-mode disposition. `Engine::set_failure_mode_disposition`
@@ -66,13 +70,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `critical_items` in readiness and export.
 - Kernel: readiness gains `resolution` counts, a `verified` gate computed from
   verified mitigations only, `accepted_risks`, `excluded` and
-  `critical_items`. Export rows gain the same fields.
+  `critical_items`. Export rows gain `local_effect`, `next_effect`,
+  `single_point` and `disposition`, each exported mitigation gains `status`
+  and `evidence`, and the report gains `critical_items`.
 - Kernel: `validate_log` reports structural problems in a session log, such as
   the duplicate ids a git union-merge produces. `project` stays total over
   such logs.
-- Docs: `docs/AGENT-INSTALL.md` and `llms.txt` guide agents and users through
-  each supported MCP client; the README gains the install, `vet` and
-  configuration sections.
 - Community: `CODE_OF_CONDUCT.md`, `SUPPORT.md`, issue forms, a pull-request
   template and `CODEOWNERS`; `CONTRIBUTING.md` and `SECURITY.md` rewritten.
 - CI: supply-chain and packaging jobs (`cargo-deny`, docs, package) and
@@ -84,7 +87,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Rust toolchain pinned to 1.99.0 and `rmcp` bumped to 1.8.
+- Rust toolchain pinned to 1.99.0 and `rmcp` bumped to 3.5.
+- MSRV: `fmeca-mcp` now needs Rust 1.89; the `fmeca` kernel stays at 1.85.
+- State dir resolution: when `FMECA_STATE_DIR` is unset, the server and
+  `fmeca-mcp check` use the nearest ancestor `.fmeca/` directory of the
+  working directory, and fall back to the user data directory only when there
+  is none.
 - `server.json` publishes the version as the OCI identifier tag
   (`ghcr.io/praxec/fmeca:0.1.0`) instead of a `version` field, which the MCP
   registry rejects on OCI packages.

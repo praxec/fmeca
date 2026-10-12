@@ -153,3 +153,13 @@ fn evidence_basis_round_trips() {
         "test"
     );
 }
+
+#[test]
+fn evidence_with_misspelled_basis_key_is_rejected() {
+    let parsed = serde_json::from_value::<fmeca::ResolutionEvidence>(serde_json::json!({
+        "kind": "commit",
+        "reference": "abc123",
+        "basys": "test"
+    }));
+    assert!(parsed.is_err());
+}
