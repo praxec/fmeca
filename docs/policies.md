@@ -33,9 +33,17 @@ A policy has:
   include `accept`, otherwise sign-off fails with `<fm>: accepted in band '<b>'
   which does not allow acceptance`), whether an overdue acceptance then fails
   (`accepted_requires_review_current`, default `false`), and whether the
-  kernel's readiness blockers are added to the sign-off reasons
-  (`include_kernel_gate`, default `true`; every built-in preset sets it to
-  `true`).
+  kernel's readiness **hygiene** blockers are added to the sign-off reasons as
+  `kernel: <blocker>` (`include_kernel_gate`, default `true`; every built-in
+  preset sets it to `true`). The hygiene blockers are `CLARIFY` (an open
+  failure mode missing cause, effect or score), `DISCIPLINE` (weak mitigation
+  order: fail-fast only) and `EMPTY` (no failure modes). The kernel's
+  residual-zone blockers (`RESIDUAL: … still has Medium/High residual
+  criticality`) are **not** added: which residuals are acceptable is the
+  policy's own `max_residual_band`, so an unmitigated failure mode in
+  `standard`'s `compensate` band passes even though the kernel calls it
+  Medium. (The kernel reports blockers as strings; the stable `RESIDUAL:`
+  prefix is the rule that leaves them out.)
 - **`actions`** — optional policy-specific actions, plus the shared built-in
   catalog when `include_builtin_actions = true`.
 

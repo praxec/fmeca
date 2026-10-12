@@ -28,7 +28,10 @@
 //! **Sign-off**: an effective band above `max_residual_band` fails unless the
 //! failure mode is accepted, `accepted_counts_as_pass` holds, the review is
 //! not overdue (when `accepted_requires_review_current`), and the effective
-//! band's `dispositions` include `accept`.
+//! band's `dispositions` include `accept`. With `include_kernel_gate`, the
+//! kernel's hygiene blockers ([`KernelGate`](crate::KernelGate): CLARIFY,
+//! weak mitigation order, EMPTY — never its residual-zone blockers) are added
+//! as `kernel: <blocker>`.
 //!
 //! # Confidence-view policies
 //!

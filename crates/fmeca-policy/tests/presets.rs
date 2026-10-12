@@ -310,6 +310,8 @@ struct ParityFixture {
     input: Vec<AnalyzeInput>,
     /// `(failure-mode id, Accepted | Excluded)`.
     dispositions: Vec<(&'static str, Disposition)>,
+    /// `(mitigation id, status, evidence)`, recorded on the session path only.
+    resolutions: Vec<(&'static str, MitigationStatus, Vec<ResolutionEvidence>)>,
 }
 
 impl ParityFixture {
@@ -319,7 +321,18 @@ impl ParityFixture {
             strategy,
             input,
             dispositions: Vec::new(),
+            resolutions: Vec::new(),
         }
+    }
+
+    fn resolved(
+        mut self,
+        mitigation_id: &'static str,
+        status: MitigationStatus,
+        evidence: Vec<ResolutionEvidence>,
+    ) -> Self {
+        self.resolutions.push((mitigation_id, status, evidence));
+        self
     }
 
     fn with(mut self, id: &'static str, disposition: Disposition) -> Self {
@@ -377,6 +390,21 @@ impl ParityFixture {
                     )
                     .unwrap();
             }
+        }
+        for (id, status, evidence) in &self.resolutions {
+            engine
+                .set_mitigation_status(
+                    SID,
+                    fmeca::MitigationStatusChange {
+                        session_id: SID.into(),
+                        mitigation_id: (*id).into(),
+                        status: *status,
+                        evidence: evidence.clone(),
+                        note: None,
+                        at: Some("2026-10-01T00:00:00Z".into()),
+                    },
+                )
+                .unwrap();
         }
         for (id, disposition) in &self.dispositions {
             engine
@@ -633,6 +661,68 @@ fn compat_band_verdict_matches_kernel_band_rule() {
         }
     }
     assert!(mismatches.is_empty(), "{mismatches:#?}");
+}
+
+// --- the kernel gate carries hygiene, not the residual zone (C1) -------------
+
+/// One open, unmitigated, fully described failure mode at 3×3 severity
+/// `data_loss` × probability `rare_edge_case`: kernel Medium (a RESIDUAL
+/// blocker), `standard` `compensate`, `prototype` `report`.
+fn medium_analysis() -> Vec<AnalyzeInput> {
+    vec![afm("fm-mid", "data_loss", "rare_edge_case")]
+}
+
+/// The sign-off of `medium_analysis` under `preset_name`, through the real
+/// `fmeca::analyze` kernel gate.
+fn medium_signoff(preset_name: &str) -> fmeca_policy::SignoffVerdict {
+    let subject =
+        subject_from_analysis(MatrixStrategy::Qualitative3x3, &medium_analysis()).unwrap();
+    let loaded = preset(preset_name).expect("preset");
+    evaluate(&subject, &loaded, as_of()).unwrap().signoff
+}
+
+#[test]
+fn standard_passes_unmitigated_compensate_band_with_real_kernel_gate() {
+    let signoff = medium_signoff("standard");
+    assert!(signoff.pass, "{:?}", signoff.reasons);
+}
+
+#[test]
+fn prototype_passes_unmitigated_report_band_with_real_kernel_gate() {
+    let signoff = medium_signoff("prototype");
+    assert!(signoff.pass, "{:?}", signoff.reasons);
+}
+
+#[test]
+fn kernel_gate_leaves_out_residual_blockers() {
+    let subject =
+        subject_from_analysis(MatrixStrategy::Qualitative3x3, &medium_analysis()).unwrap();
+    assert_eq!(
+        subject.kernel_gate,
+        KernelGate {
+            ready: true,
+            blockers: Vec::new()
+        }
+    );
+}
+
+#[test]
+fn kernel_gate_keeps_hygiene_blockers() {
+    // Low residual, but fail_fast only: the kernel's DISCIPLINE blocker stays.
+    let input = vec![mitigated_afm(
+        "fm-ff",
+        ("data_loss", "happens_in_normal_use"),
+        MitigationKind::FailFast,
+        ("cosmetic", "rare_edge_case"),
+    )];
+    let subject = subject_from_analysis(MatrixStrategy::Qualitative3x3, &input).unwrap();
+    assert_eq!(
+        (
+            subject.kernel_gate.ready,
+            subject.kernel_gate.blockers.len()
+        ),
+        (false, 1)
+    );
 }
 
 // --- safety-critical against MIL-STD-882E Table III --------------------------
@@ -1004,11 +1094,40 @@ fn golden_mixed() -> Subject {
     )
 }
 
-fn golden_fixtures() -> [(&'static str, Subject); 3] {
+/// A real session through the engine, so its kernel gate is the kernel's own
+/// (not a stub): `fm-mid` is an unmitigated kernel-Medium failure mode (a
+/// RESIDUAL blocker the gate leaves out), and `fm-fixed` a High one prevented
+/// down to Low by an implemented mitigation with test evidence (C3).
+fn golden_session() -> Subject {
+    let fixture = ParityFixture::new(
+        "golden-session",
+        MatrixStrategy::Qualitative3x3,
+        vec![
+            afm("fm-mid", "data_loss", "rare_edge_case"),
+            mitigated_afm(
+                "fm-fixed",
+                ("data_loss", "happens_in_normal_use"),
+                MitigationKind::Prevention,
+                ("cosmetic", "rare_edge_case"),
+            ),
+        ],
+    )
+    .resolved(
+        "fm-fixed-m1",
+        MitigationStatus::Implemented,
+        vec![evidence(fmeca::EvidenceKind::Test, None)],
+    );
+    subject_from_state(&fixture.session())
+}
+
+/// Every golden fixture. `session` carries a real kernel gate; the others
+/// stub a ready, empty one.
+fn golden_fixtures() -> [(&'static str, Subject); 4] {
     [
         ("open", golden_open()),
         ("mitigated", golden_mitigated()),
         ("mixed", golden_mixed()),
+        ("session", golden_session()),
     ]
 }
 
@@ -1045,37 +1164,37 @@ fn golden_for(preset_name: &str) -> Vec<String> {
 }
 
 #[test]
-fn golden_compat_preset_matches_three_fixtures() {
+fn golden_compat_preset_matches_its_golden_fixtures() {
     let mismatches = golden_for("compat-0.1");
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
-fn golden_prototype_preset_matches_three_fixtures() {
+fn golden_prototype_preset_matches_its_golden_fixtures() {
     let mismatches = golden_for("prototype");
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
-fn golden_standard_preset_matches_three_fixtures() {
+fn golden_standard_preset_matches_its_golden_fixtures() {
     let mismatches = golden_for("standard");
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
-fn golden_business_critical_preset_matches_three_fixtures() {
+fn golden_business_critical_preset_matches_its_golden_fixtures() {
     let mismatches = golden_for("business-critical");
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
-fn golden_safety_critical_preset_matches_three_fixtures() {
+fn golden_safety_critical_preset_matches_its_golden_fixtures() {
     let mismatches = golden_for("safety-critical");
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
-fn golden_confidence_view_preset_matches_three_fixtures() {
+fn golden_confidence_view_preset_matches_its_golden_fixtures() {
     let mismatches = golden_for("confidence-view");
     assert!(mismatches.is_empty(), "{mismatches:#?}");
 }

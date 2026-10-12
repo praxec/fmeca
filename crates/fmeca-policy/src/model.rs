@@ -118,9 +118,13 @@ pub struct Signoff {
     /// …unless its review is overdue (default `false`).
     #[serde(default)]
     pub accepted_requires_review_current: bool,
-    /// When true (the default), the analysis's kernel readiness blockers
-    /// (CLARIFY, weak mitigation order, EMPTY) are added to the policy's
-    /// sign-off reasons.
+    /// When true (the default), the kernel's readiness **hygiene** blockers
+    /// are added to the policy's sign-off reasons as `kernel: <blocker>`:
+    /// CLARIFY (an open failure mode missing cause, effect or score), weak
+    /// mitigation order (DISCIPLINE) and EMPTY. The kernel's residual-zone
+    /// blockers (RESIDUAL: an open Medium/High residual) are **not** added:
+    /// the residual rule is this policy's own `max_residual_band`
+    /// (see [`KernelGate`](crate::KernelGate)).
     #[serde(default = "yes")]
     pub include_kernel_gate: bool,
 }
