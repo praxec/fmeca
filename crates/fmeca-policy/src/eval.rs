@@ -25,6 +25,11 @@
 //! 6. **Actions**: the catalog actions whose `applies_when` holds, sorted by
 //!    precedence then id, marked required and covered.
 //!
+//! **Sign-off**: an effective band above `max_residual_band` fails unless the
+//! failure mode is accepted, `accepted_counts_as_pass` holds, the review is
+//! not overdue (when `accepted_requires_review_current`), and the effective
+//! band's `dispositions` include `accept`.
+//!
 //! # Confidence-view policies
 //!
 //! A policy with a `confidence` matrix maps (standard band rank, confidence)
@@ -385,7 +390,7 @@ const UNSCORED: &str = "unscored";
 ///
 /// Built-in actions (`include_builtin_actions`) come from the shared catalog,
 /// and a `confidence` matrix reads its rows from the built-in `standard`
-/// preset, both supplied through [`evaluate_with`].
+/// preset, both supplied through the crate-private `evaluate_with`.
 pub fn evaluate(
     subject: &Subject,
     policy: &LoadedPolicy,
@@ -461,6 +466,8 @@ pub(crate) fn evaluate_with(
         }
         let mut accepted_ok = false;
         let mut overdue = false;
+        // An acceptance counts only in a band whose dispositions allow it.
+        let mut acceptance_not_allowed = false;
         let status_key = match &suggestion.status {
             DispositionStatus::Unscored { .. } => "unscored",
             DispositionStatus::Open { .. } => "open",
@@ -479,10 +486,15 @@ pub(crate) fn evaluate_with(
                 }
                 // "Overdue" is the reason only when the acceptance would
                 // otherwise have counted as a pass.
+                acceptance_not_allowed = policy.signoff.accepted_counts_as_pass
+                    && banded
+                        .effective
+                        .is_some_and(|b| !b.dispositions.contains(&DispositionKind::Accept));
                 overdue = policy.signoff.accepted_counts_as_pass
                     && *review_due
                     && policy.signoff.accepted_requires_review_current;
-                accepted_ok = policy.signoff.accepted_counts_as_pass && !overdue;
+                accepted_ok =
+                    policy.signoff.accepted_counts_as_pass && !overdue && !acceptance_not_allowed;
                 "accepted"
             }
         };
@@ -494,7 +506,12 @@ pub(crate) fn evaluate_with(
             && effective.rank > max_band.rank
             && !accepted_ok
         {
-            reasons.push(if overdue {
+            reasons.push(if acceptance_not_allowed {
+                format!(
+                    "{}: accepted in band '{}' which does not allow acceptance",
+                    fm.id, effective.id
+                )
+            } else if overdue {
                 format!(
                     "{}: accepted risk in band `{}` is overdue for review",
                     fm.id, effective.id
@@ -869,6 +886,15 @@ impl Facts<'_> {
                 format!("band {} ≥ {}", effective.id, threshold.id)
             );
         }
+        if let Some(at_least) = c.rank_at_least {
+            let Some(effective) = self.effective else {
+                return Ok(None);
+            };
+            require!(
+                effective.rank >= at_least,
+                format!("band {} rank {} ≥ {at_least}", effective.id, effective.rank)
+            );
+        }
         if let Some(bands) = &c.band_in {
             let Some(effective) = self.effective else {
                 return Ok(None);
@@ -941,6 +967,19 @@ impl Facts<'_> {
                     .iter()
                     .any(|m| m.is_active() && kinds.contains(&m.kind)),
                 format!("no {} mitigation", missing.join("/"))
+            );
+        }
+        if let Some(kinds) = &c.mitigation_kinds_present {
+            let present: Vec<String> = self
+                .fm
+                .mitigations
+                .iter()
+                .filter(|m| m.is_active() && kinds.contains(&m.kind))
+                .map(|m| name(&m.kind))
+                .collect();
+            require!(
+                !present.is_empty(),
+                format!("{} mitigation present", present.join("/"))
             );
         }
         Ok(Some(why))

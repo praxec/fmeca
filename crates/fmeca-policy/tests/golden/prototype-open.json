@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "prototype",
-    "hash": "92561d30470279e0fb68d67dc9dead9411c5236ab4b54125b04741c8bc207771",
+    "hash": "ef4b146c21b18941dee3ec0713107ee6145f9fca6a886342b7dd74ec46bdf650",
     "class": "prototype",
     "matrix_derived_from": "qualitative3x3",
     "source": "preset"
@@ -31,47 +31,50 @@
           "precedence": "eliminate",
           "required": false,
           "why": [
-            "single_point true"
+            "band remediate rank 2 ≥ 2"
           ],
           "covered_by": []
         },
         {
           "id": "remove-failure-path",
-          "text": "Remove the failure path by design rather than detecting it later",
+          "text": "Remove the single point of failure by design: add redundancy or an alternative path",
           "tags": [
             "design"
           ],
           "precedence": "eliminate",
           "required": false,
           "why": [
+            "band remediate rank 2 ≥ 1",
             "single_point true"
           ],
           "covered_by": []
         },
         {
           "id": "simplify-design",
-          "text": "Simplify the design so the failure cannot be expressed",
+          "text": "Simplify the design so this failure cannot be expressed (fewer states, stricter types)",
           "tags": [
             "design"
           ],
           "precedence": "eliminate",
           "required": false,
           "why": [
+            "band remediate rank 2 ≥ 2",
             "no prevention mitigation"
           ],
           "covered_by": []
         },
         {
           "id": "capacity-headroom-review",
-          "text": "Review capacity headroom and remove the single point of failure",
+          "text": "Review capacity headroom and saturation limits on this path",
           "tags": [
             "ops",
-            "process"
+            "review"
           ],
           "precedence": "prevent",
           "required": false,
           "why": [
-            "single_point true"
+            "band remediate rank 2 ≥ 1",
+            "domain runtime"
           ],
           "covered_by": []
         },
@@ -85,6 +88,7 @@
           "precedence": "prevent",
           "required": false,
           "why": [
+            "band remediate rank 2 ≥ 1",
             "domain runtime"
           ],
           "covered_by": []
@@ -99,41 +103,29 @@
           "precedence": "prevent",
           "required": false,
           "why": [
+            "band remediate rank 2 ≥ 1",
             "domain runtime"
           ],
           "covered_by": []
         },
         {
-          "id": "secure-defaults",
-          "text": "Make the secure configuration the default",
+          "id": "alert-leading-indicator",
+          "text": "Alert on the leading indicator of this failure before users notice it",
           "tags": [
-            "security",
-            "design"
-          ],
-          "precedence": "prevent",
-          "required": false,
-          "why": [
-            "confidence C0 < C2"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "alert-leading-indicator-runbook",
-          "text": "Alert on the leading indicator and link the runbook",
-          "tags": [
-            "ops",
-            "docs"
+            "ops"
           ],
           "precedence": "detect",
           "required": false,
           "why": [
+            "band remediate rank 2 ≥ 1",
+            "domain runtime",
             "no detection mitigation"
           ],
           "covered_by": []
         },
         {
           "id": "chaos-experiment",
-          "text": "Run a bounded chaos experiment and record the result",
+          "text": "Run a bounded chaos experiment against the single point of failure and record the result",
           "tags": [
             "test",
             "ops"
@@ -141,6 +133,9 @@
           "precedence": "detect",
           "required": false,
           "why": [
+            "band remediate rank 2 ≥ 2",
+            "domain runtime",
+            "single_point true",
             "confidence C0 < C4"
           ],
           "covered_by": []
@@ -154,32 +149,22 @@
           "precedence": "detect",
           "required": false,
           "why": [
+            "band remediate rank 2 ≥ 1",
             "confidence C0 < C2"
           ],
           "covered_by": []
         },
         {
-          "id": "contract-property-test",
-          "text": "Add a contract or property test that exercises this failure mode",
-          "tags": [
-            "test"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "confidence C0 < C3"
-          ],
-          "covered_by": []
-        },
-        {
           "id": "fault-injection-test",
-          "text": "Add a fault-injection test that forces this failure mode",
+          "text": "Add a fault-injection test that forces this failure mode and checks the response",
           "tags": [
             "test"
           ],
           "precedence": "detect",
           "required": false,
           "why": [
+            "band remediate rank 2 ≥ 1",
+            "domain runtime",
             "confidence C0 < C3"
           ],
           "covered_by": []
@@ -194,7 +179,9 @@
           "precedence": "detect",
           "required": false,
           "why": [
-            "domain runtime"
+            "band remediate rank 2 ≥ 2",
+            "domain runtime",
+            "confidence C0 < C3"
           ],
           "covered_by": []
         },
@@ -208,21 +195,8 @@
           "precedence": "detect",
           "required": false,
           "why": [
+            "band remediate rank 2 ≥ 2",
             "domain runtime"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "static-analysis-rule",
-          "text": "Add a static-analysis rule that catches this class of defect",
-          "tags": [
-            "test",
-            "process"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "no detection mitigation"
           ],
           "covered_by": []
         },
@@ -236,6 +210,7 @@
           "precedence": "contain",
           "required": false,
           "why": [
+            "band remediate rank 2 ≥ 2",
             "domain runtime"
           ],
           "covered_by": []
@@ -250,13 +225,14 @@
           "precedence": "contain",
           "required": false,
           "why": [
+            "band remediate rank 2 ≥ 1",
             "domain runtime"
           ],
           "covered_by": []
         },
         {
           "id": "documented-runbook",
-          "text": "Write the manual procedure and its verification steps",
+          "text": "Write the runbook for responding to this failure, with its verification steps",
           "tags": [
             "docs",
             "ops"
@@ -264,7 +240,8 @@
           "precedence": "procedure",
           "required": false,
           "why": [
-            "no detection mitigation"
+            "band remediate rank 2 ≥ 2",
+            "domain runtime"
           ],
           "covered_by": []
         }
@@ -284,56 +261,8 @@
       "rationale_needed": false,
       "actions": [
         {
-          "id": "dependency-pinning-update-policy",
-          "text": "Pin dependencies and adopt a reviewed update policy",
-          "tags": [
-            "process",
-            "security"
-          ],
-          "precedence": "prevent",
-          "required": false,
-          "why": [
-            "domain security"
-          ],
-          "covered_by": [
-            "m1"
-          ]
-        },
-        {
-          "id": "input-validation-boundary",
-          "text": "Validate and reject input at the system boundary",
-          "tags": [
-            "design",
-            "security"
-          ],
-          "precedence": "prevent",
-          "required": false,
-          "why": [
-            "domain security"
-          ],
-          "covered_by": [
-            "m1"
-          ]
-        },
-        {
-          "id": "privacy-review",
-          "text": "Review the data flows for privacy impact",
-          "tags": [
-            "security",
-            "review"
-          ],
-          "precedence": "prevent",
-          "required": false,
-          "why": [
-            "domain security"
-          ],
-          "covered_by": [
-            "m1"
-          ]
-        },
-        {
-          "id": "threat-model",
-          "text": "Threat-model this failure mode with the security team",
+          "id": "secure-defaults",
+          "text": "Make the secure configuration the default",
           "tags": [
             "security",
             "design"
@@ -346,102 +275,6 @@
           "covered_by": [
             "m1"
           ]
-        },
-        {
-          "id": "alert-leading-indicator-runbook",
-          "text": "Alert on the leading indicator and link the runbook",
-          "tags": [
-            "ops",
-            "docs"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "no detection mitigation"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "chaos-experiment",
-          "text": "Run a bounded chaos experiment and record the result",
-          "tags": [
-            "test",
-            "ops"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "confidence C2 < C4"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "contract-property-test",
-          "text": "Add a contract or property test that exercises this failure mode",
-          "tags": [
-            "test"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "confidence C2 < C3"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "fault-injection-test",
-          "text": "Add a fault-injection test that forces this failure mode",
-          "tags": [
-            "test"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "confidence C2 < C3"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "penetration-test",
-          "text": "Commission a penetration test of the affected surface",
-          "tags": [
-            "security",
-            "test"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "domain security"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "static-analysis-rule",
-          "text": "Add a static-analysis rule that catches this class of defect",
-          "tags": [
-            "test",
-            "process"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "no detection mitigation"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "documented-runbook",
-          "text": "Write the manual procedure and its verification steps",
-          "tags": [
-            "docs",
-            "ops"
-          ],
-          "precedence": "procedure",
-          "required": false,
-          "why": [
-            "no detection mitigation"
-          ],
-          "covered_by": []
         }
       ]
     }

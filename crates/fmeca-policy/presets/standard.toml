@@ -60,17 +60,15 @@ accepted_counts_as_pass = true
 accepted_requires_review_current = true
 include_kernel_gate = true
 
+# Required-action tailoring: a design review is required on `review` at the
+# technical-plan and implementation levels (where `design-review` applies).
+# The built-in `fault-injection-test` and `contract-property-test` cover
+# testing, so standard no longer overrides them.
+
 [[actions]]
 id = "design-review"
 text = "Hold a design review of this failure mode with a second engineer"
 tags = ["review", "design"]
 precedence = "eliminate"
 applies_when = { band_at_least = "review", level_in = ["technical_plan", "implementation"] }
-required_when = { class_in = ["business-critical", "safety-critical"] }
-
-[[actions]]
-id = "fault-injection-test"
-text = "Add a fault-injection or property test that exercises this failure mode"
-tags = ["test"]
-precedence = "detect"
-applies_when = { band_at_least = "compensate", confidence_below = "C3" }
+required_when = { band_at_least = "review" }

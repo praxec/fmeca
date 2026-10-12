@@ -50,12 +50,14 @@ cells = [
 
 [matrices.confidence]
 derived_from = "standard-bands"
-# Rows: the `standard` preset's band rank (0 none, 1 compensate, 2 review).
-# Columns: confidence C4, C3, C2, C1, C0.
+# The maintainer's chart 2. Rows: the `standard` preset's effective band
+# (rank 0 none, 1 compensate, 2 review = the chart's Risk columns 1, 3, 5).
+# Columns: confidence C4, C3, C2, C1, C0 (the chart's Absolute, High,
+# Moderate, Slight, None).
 cells = [
-  ["none",   "none",   "none",      "none",      "report"],
-  ["none",   "report", "report",    "remediate", "remediate"],
-  ["report", "report", "remediate", "remediate", "remediate"],
+  ["none",   "none",      "none",      "report",    "report"],
+  ["none",   "report",    "report",    "remediate", "remediate"],
+  ["report", "remediate", "remediate", "remediate", "remediate"],
 ]
 
 [signoff]

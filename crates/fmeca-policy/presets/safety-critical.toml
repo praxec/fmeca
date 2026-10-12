@@ -44,22 +44,27 @@ review_interval = "90d"
 
 [matrices.qualitative3x3]
 derived_from = "qualitative3x3"
+# The 3x3 analogue samples the 5x5 below at its middle three rows and columns:
+# 3x3 severity Low/Medium/High = MIL-STD-882E Negligible IV / Marginal III /
+# Critical II (5x5 rows 2..4); probability Low/Medium/High = Remote D /
+# Occasional C / Probable B (5x5 columns 2..4).
 cells = [
   ["low",    "low",     "medium"],
-  ["low",    "medium",  "serious"],
+  ["medium", "medium",  "serious"],
   ["medium", "serious", "high"],
 ]
 
 [matrices.nasa8004_5x5]
 derived_from = "nasa8004_5x5"
-# Rows are severity 1..5 (1 = negligible) and columns probability 1..5
-# (1 = improbable). MIL-STD-882E severity IV..I map to rows 1..4; row 5 is
-# negligible, one band below marginal.
+# MIL-STD-882E Table III. Rows are severity ordinal 1..5 (top = 1); columns
+# are probability ordinal 1..5 = E Improbable, D Remote, C Occasional,
+# B Probable, A Frequent. Severity IV..I (Negligible, Marginal, Critical,
+# Catastrophic) map to rows 2..5; row 1 is one band below Negligible.
 cells = [
   ["low",    "low",     "low",     "low",     "low"],
   ["low",    "low",     "low",     "medium",  "medium"],
-  ["low",    "medium",  "medium",  "serious", "serious"],
-  ["medium", "serious", "serious", "high",    "high"],
+  ["medium", "medium",  "medium",  "serious", "serious"],
+  ["medium", "medium",  "serious", "high",    "high"],
   ["medium", "serious", "high",    "high",    "high"],
 ]
 
@@ -69,24 +74,37 @@ accepted_counts_as_pass = true
 accepted_requires_review_current = true
 include_kernel_gate = true
 
-[[actions]]
-id = "design-order-precedence"
-text = "Prefer elimination and prevention over detection and procedure for this hazard"
-tags = ["design", "process"]
-precedence = "eliminate"
-applies_when = { band_at_least = "serious" }
+# Required-action tailoring. Precedence orders the suggestions; it is not
+# enforced. What is enforced is `required_when`: a required action with no
+# `covered_by` fails sign-off.
 
 [[actions]]
-id = "require-prevention"
-text = "Provide an engineered prevention for a serious or high hazard"
+id = "design-review"
+text = "Hold a design review of this hazard with a second engineer and record the outcome"
+tags = ["review", "design"]
+precedence = "eliminate"
+applies_when = { band_at_least = "serious" }
+required_when = { band_at_least = "serious" }
+
+[[actions]]
+id = "prevention-before-detection"
+text = "Provide an engineered prevention for this serious or high hazard before relying on detection"
 tags = ["design"]
 precedence = "prevent"
 applies_when = { band_at_least = "serious" }
 required_when = { band_at_least = "serious", mitigation_kinds_missing = ["prevention"] }
 
 [[actions]]
+id = "test-and-inspection-evidence"
+text = "Attach test and inspection evidence to the mitigations that reduce this hazard"
+tags = ["test", "review"]
+precedence = "procedure"
+applies_when = { band_at_least = "serious" }
+required_when = { band_at_least = "serious", confidence_below = "C3" }
+
+[[actions]]
 id = "flag-procedural-only"
-text = "Justify procedural-only mitigation for a serious or high hazard"
+text = "Justify why fail-fast handling alone is adequate for this serious or high hazard"
 tags = ["process", "docs"]
 precedence = "procedure"
-applies_when = { band_at_least = "serious", mitigation_kinds_missing = ["prevention", "detection"] }
+applies_when = { band_at_least = "serious", mitigation_kinds_present = ["fail_fast"], mitigation_kinds_missing = ["prevention", "detection"] }

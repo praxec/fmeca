@@ -60,18 +60,30 @@ accepted_counts_as_pass = true
 accepted_requires_review_current = true
 include_kernel_gate = true
 
+# Required-action tailoring. Precedence orders the suggestions; it is not
+# enforced. What is enforced is `required_when`: a required action with no
+# `covered_by` fails sign-off.
+
 [[actions]]
-id = "require-prevention"
+id = "design-review"
+text = "Hold a design review of this failure mode with a second engineer"
+tags = ["review", "design"]
+precedence = "eliminate"
+applies_when = { band_at_least = "review" }
+required_when = { band_at_least = "review" }
+
+[[actions]]
+id = "prevention-before-detection"
 text = "Prevent the failure by design before adding detection on a review-band risk"
 tags = ["design", "process"]
 precedence = "prevent"
-applies_when = { band_in = ["review"] }
-required_when = { band_in = ["review"], mitigation_kinds_missing = ["prevention"] }
+applies_when = { band_at_least = "review" }
+required_when = { band_at_least = "review", mitigation_kinds_missing = ["prevention"] }
 
 [[actions]]
 id = "mitigate-single-point"
 text = "Mitigate the single point of failure with an implemented prevention"
 tags = ["design", "ops"]
 precedence = "prevent"
-applies_when = { band_in = ["review"], single_point = true }
-required_when = { band_in = ["review"], single_point = true }
+applies_when = { band_at_least = "review", single_point = true }
+required_when = { band_at_least = "review", single_point = true }

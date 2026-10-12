@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "confidence-view",
-    "hash": "0d32536703bd351194bce1c5367ef2118df6ba8522696feff5bbd3e6bc62021c",
+    "hash": "30027bb291a264929f4a3052f84ae42af9748f5061caebd8232298aa0aa78cb9",
     "class": "confidence-view",
     "matrix_derived_from": "standard-bands",
     "source": "preset"
@@ -22,19 +22,6 @@
       "rationale_needed": false,
       "actions": [
         {
-          "id": "simplify-design",
-          "text": "Simplify the design so the failure cannot be expressed",
-          "tags": [
-            "design"
-          ],
-          "precedence": "eliminate",
-          "required": false,
-          "why": [
-            "no prevention mitigation"
-          ],
-          "covered_by": []
-        },
-        {
           "id": "dependency-pinning-update-policy",
           "text": "Pin dependencies and adopt a reviewed update policy",
           "tags": [
@@ -44,6 +31,7 @@
           "precedence": "prevent",
           "required": false,
           "why": [
+            "band report rank 1 ≥ 1",
             "domain delivery"
           ],
           "covered_by": []
@@ -58,52 +46,7 @@
           "precedence": "prevent",
           "required": false,
           "why": [
-            "domain delivery"
-          ],
-          "covered_by": []
-        },
-        {
-          "id": "chaos-experiment",
-          "text": "Run a bounded chaos experiment and record the result",
-          "tags": [
-            "test",
-            "ops"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "confidence C3 < C4"
-          ],
-          "covered_by": [
-            "m1"
-          ]
-        },
-        {
-          "id": "slo-error-budget",
-          "text": "Express the guard as an SLO with an error budget",
-          "tags": [
-            "ops",
-            "process"
-          ],
-          "precedence": "detect",
-          "required": false,
-          "why": [
-            "domain delivery"
-          ],
-          "covered_by": [
-            "m1"
-          ]
-        },
-        {
-          "id": "backup-restore-test",
-          "text": "Rehearse backup and restore for the affected data",
-          "tags": [
-            "ops",
-            "test"
-          ],
-          "precedence": "contain",
-          "required": false,
-          "why": [
+            "band report rank 1 ≥ 1",
             "domain delivery"
           ],
           "covered_by": []
@@ -117,6 +60,7 @@
           "precedence": "contain",
           "required": false,
           "why": [
+            "band report rank 1 ≥ 1",
             "response_class restructure"
           ],
           "covered_by": []
@@ -131,6 +75,7 @@
           "precedence": "contain",
           "required": false,
           "why": [
+            "band report rank 1 ≥ 1",
             "domain delivery"
           ],
           "covered_by": []
@@ -145,6 +90,7 @@
           "precedence": "contain",
           "required": false,
           "why": [
+            "band report rank 1 ≥ 1",
             "domain delivery"
           ],
           "covered_by": []

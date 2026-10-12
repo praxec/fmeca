@@ -776,3 +776,92 @@ fn overdue_reason_only_when_acceptance_counts() {
         vec!["fm1: effective band `review` ranks above max_residual_band `act`".to_string()]
     );
 }
+
+// --- acceptance must be allowed by the band ----------------------------------
+
+#[test]
+fn acceptance_not_allowed_in_band_fails_signoff() {
+    let policy = policy_from(&TEST_POLICY.replace(
+        r#"dispositions = ["mitigate", "research", "elevate", "accept"]"#,
+        r#"dispositions = ["mitigate", "research", "elevate"]"#,
+    ));
+    let subject = subject(vec![accepted(fm("fm1", 3, 3), "2026-10-01T00:00:00Z")]);
+    let s = evaluate(&subject, &policy, as_of()).unwrap();
+    assert_eq!(
+        s.signoff.reasons,
+        vec!["fm1: accepted in band 'review' which does not allow acceptance".to_string()]
+    );
+}
+
+#[test]
+fn acceptance_allowed_in_band_passes() {
+    let s = eval(vec![accepted(fm("fm1", 3, 3), "2026-10-01T00:00:00Z")]);
+    assert!(s.signoff.pass, "{:?}", s.signoff.reasons);
+}
+
+// --- rank_at_least and mitigation_kinds_present ------------------------------
+
+/// `TEST_POLICY` plus one action with the given `applies_when`.
+fn policy_with_action(applies_when: &str) -> LoadedPolicy {
+    policy_from(&format!(
+        "{TEST_POLICY}\n[[actions]]\nid = \"probe\"\ntext = \"Probe\"\ntags = [\"test\"]\nprecedence = \"procedure\"\napplies_when = {applies_when}\n"
+    ))
+}
+
+/// The ids of the failure modes that were suggested the `probe` action.
+fn probed(policy: &LoadedPolicy, failure_modes: Vec<SubjectFm>) -> Vec<String> {
+    evaluate(&subject(failure_modes), policy, as_of())
+        .unwrap()
+        .failure_modes
+        .into_iter()
+        .filter(|f| f.actions.iter().any(|a| a.id == "probe"))
+        .map(|f| f.id)
+        .collect()
+}
+
+#[test]
+fn rank_at_least_matches_effective_band_rank() {
+    let policy = policy_with_action("{ rank_at_least = 1 }");
+    // fm1 is `none` (rank 0), fm2 `act` (rank 1), fm3 `review` (rank 2).
+    let ids = probed(
+        &policy,
+        vec![fm("fm1", 1, 1), fm("fm2", 2, 2), fm("fm3", 3, 3)],
+    );
+    assert_eq!(ids, vec!["fm2".to_string(), "fm3".to_string()]);
+}
+
+#[test]
+fn rank_at_least_never_matches_unscored() {
+    let policy = policy_with_action("{ rank_at_least = 0 }");
+    assert!(probed(&policy, vec![unscored("fm1")]).is_empty());
+}
+
+#[test]
+fn rank_at_least_uses_the_fallback_band() {
+    // Declared-only mitigation (C0) on a `review` inherent risk: the residual
+    // `act` (min C1) falls back to `review`, so a rank-2 gate matches.
+    let policy = policy_with_action("{ rank_at_least = 2 }");
+    let f = mitigated(
+        fm("fm1", 3, 3),
+        mitigation("m1", MitigationKind::Prevention, (2, 2), vec![]),
+    );
+    assert_eq!(probed(&policy, vec![f]), vec!["fm1".to_string()]);
+}
+
+#[test]
+fn mitigation_kinds_present_needs_an_active_mitigation_of_the_kind() {
+    let policy = policy_with_action(r#"{ mitigation_kinds_present = ["fail_fast"] }"#);
+    let with_fail_fast = mitigated(
+        fm("fm1", 3, 3),
+        mitigation("m1", MitigationKind::FailFast, (2, 2), vec![]),
+    );
+    let with_prevention = mitigated(
+        fm("fm2", 3, 3),
+        mitigation("m2", MitigationKind::Prevention, (2, 2), vec![]),
+    );
+    let ids = probed(
+        &policy,
+        vec![with_fail_fast, with_prevention, fm("fm3", 3, 3)],
+    );
+    assert_eq!(ids, vec!["fm1".to_string()]);
+}

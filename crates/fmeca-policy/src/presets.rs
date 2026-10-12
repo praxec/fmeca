@@ -10,7 +10,7 @@
 //! [`resolve`] is the public entry point used by the MCP and CLI layers: it
 //! prefers a built-in preset, then a project file at
 //! `<project_dir>/<name>.toml` (see
-//! [`load_project_policy`](crate::load_project_policy)).
+//! [`load_project_policy`]).
 
 use std::path::Path;
 
@@ -70,7 +70,8 @@ fn preset_text(name: &str) -> Option<&'static str> {
 ///
 /// When the preset sets `include_builtin_actions`, the shared
 /// [`builtin_actions`] catalog is merged into its own actions (its own action
-/// ids win), so the returned policy is self-contained. The
+/// ids win), so the returned policy is self-contained and its hash covers
+/// the merged catalog. (A project policy's hash covers only its file.) The
 /// [evaluator](crate::evaluate) also merges the catalog at query time for
 /// project policies.
 pub fn preset(name: &str) -> Option<LoadedPolicy> {

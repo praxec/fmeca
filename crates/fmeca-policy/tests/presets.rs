@@ -4,18 +4,20 @@
 //! Every test makes one behavioural assertion. Goldens are compared
 //! byte-for-byte; regenerate them only with `FMECA_BLESS=1`.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use fmeca::{
-    AnalysisLevel, AnalyzeInput, AnalyzeMitigation, Disposition, Domain, EntityRef, MatrixStrategy,
-    MitigationKind, MitigationStatus, ResolutionEvidence,
+    AnalysisLevel, AnalyzeInput, AnalyzeMitigation, Disposition, DispositionChange, Domain, Engine,
+    EntityRef, EvidenceRef, FailureMode, FmecaState, MatrixStrategy, Mitigation, MitigationKind,
+    MitigationStatus, ResolutionEvidence, StateStore,
 };
 use fmeca_policy::presets::{PRESET_NAMES, builtin_actions, preset, resolve};
 use fmeca_policy::{
-    Accepted, Conditions, Date, KernelGate, LoadedPolicy, PolicySource, STANDARD_BAND_COUNT,
-    Subject, SubjectFm, SubjectMitigation, evaluate, parse_date, parse_policy, policy_hash,
-    subject_from_analysis, subject_from_state, validate,
+    Accepted, Conditions, Date, KernelGate, LoadedPolicy, PolicyError, PolicySource,
+    STANDARD_BAND_COUNT, Subject, SubjectFm, SubjectMitigation, evaluate, parse_date, parse_policy,
+    policy_hash, subject_from_analysis, subject_from_state, validate,
 };
 
 fn as_of() -> Date {
@@ -55,7 +57,10 @@ fn resolve_returns_a_preset_by_name() {
 
 #[test]
 fn resolve_unknown_name_without_project_dir_is_not_found() {
-    assert!(resolve("no-such-policy", None).is_err());
+    assert!(matches!(
+        resolve("no-such-policy", None),
+        Err(PolicyError::NotFound(_))
+    ));
 }
 
 // --- built-in action catalog -------------------------------------------------
@@ -235,6 +240,164 @@ fn confidence_policy_reads_its_row_from_the_standard_preset() {
 
 // --- compat-0.1 parity with the kernel readiness gate ------------------------
 
+/// The 0.1 kernel bucket each compat band stands for: `Low` → `none`,
+/// `Medium`/`High` → `mitigate`.
+fn compat_band_for(criticality: fmeca::Criticality) -> &'static str {
+    match criticality {
+        fmeca::Level::Low => "none",
+        fmeca::Level::Medium | fmeca::Level::High => "mitigate",
+    }
+}
+
+#[test]
+fn compat_cells_equal_kernel_criticality() {
+    let compat = preset("compat-0.1").expect("compat preset");
+    let mut mismatches = Vec::new();
+    for strategy in [MatrixStrategy::Qualitative3x3, MatrixStrategy::Nasa8004_5x5] {
+        let cells = &compat.policy.matrices[strategy.id()].cells;
+        let n = strategy.level_count();
+        for s in 1..=n {
+            for p in 1..=n {
+                let expected = compat_band_for(strategy.criticality(s, p));
+                let actual = cells[usize::from(s - 1)][usize::from(p - 1)].as_str();
+                if actual != expected {
+                    mismatches.push(format!(
+                        "{} ({s},{p}): {actual} but kernel says {expected}",
+                        strategy.id()
+                    ));
+                }
+            }
+        }
+    }
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
+}
+
+/// An in-memory event store, so the session path runs through the real
+/// [`fmeca::Engine`] without touching the filesystem.
+#[derive(Default)]
+struct MemStore(Mutex<BTreeMap<String, Vec<fmeca::Event>>>);
+
+impl StateStore for MemStore {
+    fn append(&self, session_id: &str, event: &fmeca::Event) -> fmeca::Result<()> {
+        self.0
+            .lock()
+            .unwrap()
+            .entry(session_id.to_string())
+            .or_default()
+            .push(event.clone());
+        Ok(())
+    }
+
+    fn replay(&self, session_id: &str) -> fmeca::Result<Vec<fmeca::Event>> {
+        self.0
+            .lock()
+            .unwrap()
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| fmeca::FmecaError::SessionNotFound(session_id.to_string()))
+    }
+
+    fn exists(&self, session_id: &str) -> fmeca::Result<bool> {
+        Ok(self.0.lock().unwrap().contains_key(session_id))
+    }
+}
+
+/// One parity fixture: failure modes as `analyze` input, plus dispositions
+/// recorded on the session path only (`AnalyzeInput` carries none).
+struct ParityFixture {
+    name: &'static str,
+    strategy: MatrixStrategy,
+    input: Vec<AnalyzeInput>,
+    /// `(failure-mode id, Accepted | Excluded)`.
+    dispositions: Vec<(&'static str, Disposition)>,
+}
+
+impl ParityFixture {
+    fn new(name: &'static str, strategy: MatrixStrategy, input: Vec<AnalyzeInput>) -> Self {
+        Self {
+            name,
+            strategy,
+            input,
+            dispositions: Vec::new(),
+        }
+    }
+
+    fn with(mut self, id: &'static str, disposition: Disposition) -> Self {
+        self.dispositions.push((id, disposition));
+        self
+    }
+
+    /// The same failure modes built as a session through the engine.
+    fn session(&self) -> FmecaState {
+        const SID: &str = "parity";
+        let engine = Engine::new(Arc::new(MemStore::default()));
+        engine.open_session_with(SID, self.strategy).unwrap();
+        for input in &self.input {
+            engine
+                .add_failure_mode(
+                    SID,
+                    FailureMode {
+                        id: input.id.clone(),
+                        session_id: SID.into(),
+                        component: input.component.clone(),
+                        description: input.description.clone(),
+                        cause: input.cause.clone(),
+                        effect: input.effect.clone(),
+                        severity_observations: input.severity_observations.clone(),
+                        probability_observations: input.probability_observations.clone(),
+                        domain: input.domain,
+                        scope: input.scope,
+                        source: EvidenceRef::new("turn-1"),
+                        parent: None,
+                        refs: Vec::new(),
+                        local_effect: None,
+                        next_effect: None,
+                        single_point: false,
+                    },
+                )
+                .unwrap();
+            for m in &input.mitigations {
+                engine
+                    .add_mitigation(
+                        SID,
+                        Mitigation {
+                            id: m.id.clone(),
+                            session_id: SID.into(),
+                            failure_mode_id: input.id.clone(),
+                            kind: m.kind,
+                            description: m.description.clone(),
+                            residual_severity_observations: m
+                                .residual_severity_observations
+                                .clone(),
+                            residual_probability_observations: m
+                                .residual_probability_observations
+                                .clone(),
+                            source: EvidenceRef::new("turn-2"),
+                        },
+                    )
+                    .unwrap();
+            }
+        }
+        for (id, disposition) in &self.dispositions {
+            engine
+                .set_failure_mode_disposition(
+                    SID,
+                    DispositionChange {
+                        session_id: SID.into(),
+                        failure_mode_id: (*id).into(),
+                        disposition: *disposition,
+                        rationale: "known and bounded".into(),
+                        approver: Some("lead".into()),
+                        evidence: vec![evidence(fmeca::EvidenceKind::Test, None)],
+                        at: Some("2026-10-01T00:00:00Z".into()),
+                    },
+                )
+                .unwrap();
+        }
+        engine.state(SID).unwrap()
+    }
+}
+
 fn afm(id: &str, severity: &str, probability: &str) -> AnalyzeInput {
     AnalyzeInput {
         id: id.into(),
@@ -250,108 +413,478 @@ fn afm(id: &str, severity: &str, probability: &str) -> AnalyzeInput {
     }
 }
 
-fn analyze_fixture(strategy: MatrixStrategy, input: Vec<AnalyzeInput>) -> (Subject, bool) {
-    let report = fmeca::analyze(strategy, &input).unwrap();
-    let subject = subject_from_analysis(strategy, &input).unwrap();
-    (subject, report.ready)
-}
-
-fn session_fixture(log: &str) -> (Subject, bool) {
-    let events: Vec<fmeca::Event> = log
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .map(|l| serde_json::from_str(l).unwrap())
-        .collect();
-    let state = fmeca::projection::project(&events);
-    let ready = state.readiness.ready;
-    (subject_from_state(&state), ready)
-}
-
-const ACCEPTED_LOG: &str = r#"
-{"type":"session_opened","session_id":"s1","matrix_strategy":"qualitative3x3"}
-{"type":"failure_mode_added","failure_mode":{"id":"fm-acc","session_id":"s1","component":{"id":"c1"},"description":"d","cause":"c","effect":"e","severity_observations":["data_loss"],"probability_observations":["happens_in_normal_use"],"domain":"runtime","source":{"turn_id":"t1"}}}
-{"type":"failure_mode_dispositioned","change":{"session_id":"s1","failure_mode_id":"fm-acc","disposition":"accepted","rationale":"known and bounded","approver":"lead"}}
-"#;
-
-const EXCLUDED_LOG: &str = r#"
-{"type":"session_opened","session_id":"s1","matrix_strategy":"qualitative3x3"}
-{"type":"failure_mode_added","failure_mode":{"id":"fm-bad","session_id":"s1","component":{"id":"c1"},"description":"d","cause":"c","effect":"e","severity_observations":["data_loss"],"probability_observations":["happens_in_normal_use"],"domain":"runtime","source":{"turn_id":"t1"}}}
-{"type":"failure_mode_dispositioned","change":{"session_id":"s1","failure_mode_id":"fm-bad","disposition":"excluded","rationale":"not credible","evidence":[{"kind":"test","reference":"t"}]}}
-{"type":"failure_mode_added","failure_mode":{"id":"fm-good","session_id":"s1","component":{"id":"c1"},"description":"d","cause":"c","effect":"e","severity_observations":["cosmetic"],"probability_observations":["rare_edge_case"],"domain":"runtime","source":{"turn_id":"t1"}}}
-"#;
-
-fn compat_fixtures() -> Vec<(&'static str, Subject, bool)> {
-    let mut fixtures = Vec::new();
-
-    let (s, r) = analyze_fixture(
-        MatrixStrategy::Qualitative3x3,
-        vec![afm("fm-low", "cosmetic", "rare_edge_case")],
-    );
-    fixtures.push(("analyze-3x3-low", s, r));
-
-    let (s, r) = analyze_fixture(
-        MatrixStrategy::Qualitative3x3,
-        vec![afm("fm-high", "data_loss", "happens_in_normal_use")],
-    );
-    fixtures.push(("analyze-3x3-high", s, r));
-
-    let (s, r) = analyze_fixture(
-        MatrixStrategy::Nasa8004_5x5,
-        vec![afm("fm-low", "negligible_impact", "improbable")],
-    );
-    fixtures.push(("analyze-5x5-low", s, r));
-
-    let (s, r) = analyze_fixture(
-        MatrixStrategy::Nasa8004_5x5,
-        vec![afm("fm-high", "loss_of_life_or_mission", "near_certain")],
-    );
-    fixtures.push(("analyze-5x5-high", s, r));
-
-    let (s, r) = analyze_fixture(
-        MatrixStrategy::Qualitative3x3,
-        vec![AnalyzeInput {
-            severity_observations: Vec::new(),
-            probability_observations: Vec::new(),
-            ..afm("fm-unscored", "cosmetic", "rare_edge_case")
-        }],
-    );
-    fixtures.push(("analyze-unscored", s, r));
-
-    let mut mitigated = afm("fm-mitigated", "data_loss", "happens_in_normal_use");
-    mitigated.mitigations.push(AnalyzeMitigation {
-        id: "m1".into(),
-        kind: MitigationKind::Prevention,
+fn mitigated_afm(
+    id: &str,
+    (severity, probability): (&str, &str),
+    kind: MitigationKind,
+    (residual_severity, residual_probability): (&str, &str),
+) -> AnalyzeInput {
+    let mut input = afm(id, severity, probability);
+    input.mitigations.push(AnalyzeMitigation {
+        id: format!("{id}-m1"),
+        kind,
         description: "fix".into(),
-        residual_severity_observations: vec!["cosmetic".into()],
-        residual_probability_observations: vec!["rare_edge_case".into()],
+        residual_severity_observations: vec![residual_severity.into()],
+        residual_probability_observations: vec![residual_probability.into()],
     });
-    let (s, r) = analyze_fixture(MatrixStrategy::Qualitative3x3, vec![mitigated]);
-    fixtures.push(("analyze-mitigated", s, r));
+    input
+}
 
-    let (s, r) = session_fixture(ACCEPTED_LOG);
-    fixtures.push(("session-accepted", s, r));
-
-    let (s, r) = session_fixture(EXCLUDED_LOG);
-    fixtures.push(("session-excluded", s, r));
-
-    fixtures
+/// Low, Medium and High cells, mitigated and kernel-blocked cases on both
+/// strategies, plus unscored, empty, accepted and excluded analyses.
+fn parity_fixtures() -> Vec<ParityFixture> {
+    use MatrixStrategy::{Nasa8004_5x5 as N5, Qualitative3x3 as Q3};
+    const HIGH_3: (&str, &str) = ("data_loss", "happens_in_normal_use");
+    const LOW_3: (&str, &str) = ("cosmetic", "rare_edge_case");
+    const HIGH_5: (&str, &str) = ("loss_of_life_or_mission", "near_certain");
+    const MEDIUM_5: (&str, &str) = ("degraded_capability", "occasional");
+    const LOW_5: (&str, &str) = ("negligible_impact", "improbable");
+    let unscored = AnalyzeInput {
+        severity_observations: Vec::new(),
+        probability_observations: Vec::new(),
+        ..afm("fm-unscored", "cosmetic", "rare_edge_case")
+    };
+    vec![
+        ParityFixture::new("3x3-low", Q3, vec![afm("fm-low", LOW_3.0, LOW_3.1)]),
+        ParityFixture::new(
+            "3x3-medium",
+            Q3,
+            vec![afm("fm-medium", "user_facing_degradation", "occasional")],
+        ),
+        ParityFixture::new("3x3-high", Q3, vec![afm("fm-high", HIGH_3.0, HIGH_3.1)]),
+        ParityFixture::new(
+            "3x3-mitigated",
+            Q3,
+            vec![mitigated_afm(
+                "fm-m",
+                HIGH_3,
+                MitigationKind::Prevention,
+                LOW_3,
+            )],
+        ),
+        ParityFixture::new(
+            "3x3-mitigated-to-medium",
+            Q3,
+            vec![mitigated_afm(
+                "fm-m",
+                HIGH_3,
+                MitigationKind::Detection,
+                ("recoverable_error", "occasional"),
+            )],
+        ),
+        // Low residual, but fail_fast only: the kernel's DISCIPLINE blocker.
+        ParityFixture::new(
+            "3x3-fail-fast-only",
+            Q3,
+            vec![mitigated_afm(
+                "fm-ff",
+                HIGH_3,
+                MitigationKind::FailFast,
+                LOW_3,
+            )],
+        ),
+        ParityFixture::new("3x3-unscored", Q3, vec![unscored]),
+        ParityFixture::new("3x3-empty", Q3, Vec::new()),
+        ParityFixture::new("5x5-low", N5, vec![afm("fm-low", LOW_5.0, LOW_5.1)]),
+        ParityFixture::new(
+            "5x5-medium",
+            N5,
+            vec![afm("fm-medium", MEDIUM_5.0, MEDIUM_5.1)],
+        ),
+        ParityFixture::new("5x5-high", N5, vec![afm("fm-high", HIGH_5.0, HIGH_5.1)]),
+        ParityFixture::new(
+            "5x5-mitigated",
+            N5,
+            vec![mitigated_afm(
+                "fm-m",
+                HIGH_5,
+                MitigationKind::Prevention,
+                LOW_5,
+            )],
+        ),
+        ParityFixture::new(
+            "5x5-mitigated-to-medium",
+            N5,
+            vec![mitigated_afm(
+                "fm-m",
+                HIGH_5,
+                MitigationKind::Prevention,
+                MEDIUM_5,
+            )],
+        ),
+        ParityFixture::new("3x3-accepted", Q3, vec![afm("fm-acc", HIGH_3.0, HIGH_3.1)])
+            .with("fm-acc", Disposition::Accepted),
+        ParityFixture::new(
+            "3x3-excluded",
+            Q3,
+            vec![
+                afm("fm-bad", HIGH_3.0, HIGH_3.1),
+                afm("fm-good", LOW_3.0, LOW_3.1),
+            ],
+        )
+        .with("fm-bad", Disposition::Excluded),
+        ParityFixture::new(
+            "5x5-accepted-and-low",
+            N5,
+            vec![
+                afm("fm-acc", HIGH_5.0, HIGH_5.1),
+                afm("fm-low", LOW_5.0, LOW_5.1),
+            ],
+        )
+        .with("fm-acc", Disposition::Accepted),
+    ]
 }
 
 #[test]
+fn parity_fixtures_cover_every_bucket_and_a_mitigation_on_both_strategies() {
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for fixture in parity_fixtures() {
+        let state = fixture.session();
+        for view in &state.failure_modes {
+            let strategy = fixture.strategy.id();
+            if let Some(c) = view.residual_criticality {
+                seen.insert(format!("{strategy} {c:?}"));
+            }
+            if !view.mitigations.is_empty() {
+                seen.insert(format!("{strategy} mitigated"));
+            }
+        }
+    }
+    let missing: Vec<String> = ["qualitative3x3", "nasa8004_5x5"]
+        .iter()
+        .flat_map(|s| ["Low", "Medium", "High", "mitigated"].map(|c| format!("{s} {c}")))
+        .filter(|key| !seen.contains(key))
+        .collect();
+    assert!(missing.is_empty(), "uncovered: {missing:?}");
+}
+
+/// Review Focus 5. Per fixture, every verdict available must agree: the
+/// one-shot `fmeca::analyze(..).ready`, the session-path `readiness.ready`,
+/// and `compat-0.1`'s `signoff.pass` on both the session and the analysis
+/// subject. Fixtures with recorded dispositions have no `analyze` form.
+#[test]
 fn compat_preset_matches_readiness_on_all_fixtures() {
     let compat = preset("compat-0.1").expect("compat preset");
-    let mismatches: Vec<String> = compat_fixtures()
-        .into_iter()
-        .filter_map(|(name, subject, ready)| {
-            let pass = evaluate(&subject, &compat, as_of()).unwrap().signoff.pass;
-            (pass != ready).then(|| format!("{name}: compat pass={pass} but kernel ready={ready}"))
-        })
+    let mut mismatches = Vec::new();
+    for fixture in parity_fixtures() {
+        let state = fixture.session();
+        let mut verdicts = vec![
+            ("session readiness.ready", state.readiness.ready),
+            (
+                "compat pass (session)",
+                evaluate(&subject_from_state(&state), &compat, as_of())
+                    .unwrap()
+                    .signoff
+                    .pass,
+            ),
+        ];
+        if fixture.dispositions.is_empty() {
+            let report = fmeca::analyze(fixture.strategy, &fixture.input).unwrap();
+            let subject = subject_from_analysis(fixture.strategy, &fixture.input).unwrap();
+            verdicts.push(("analyze.ready", report.ready));
+            verdicts.push((
+                "compat pass (analysis)",
+                evaluate(&subject, &compat, as_of()).unwrap().signoff.pass,
+            ));
+        }
+        if verdicts.iter().any(|(_, v)| *v != verdicts[0].1) {
+            mismatches.push(format!("{}: {verdicts:?}", fixture.name));
+        }
+    }
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
+}
+
+/// With the kernel gate switched off, compat-0.1's band rule alone must equal
+/// the kernel's residual rule: no open (not accepted, not excluded) failure
+/// mode with a Medium or High residual. Fixtures with an unscored failure mode
+/// are skipped: the evaluator fails those under its separate `unscored` rule.
+#[test]
+fn compat_band_verdict_matches_kernel_band_rule() {
+    let mut band_only = preset("compat-0.1").expect("compat preset");
+    band_only.policy.signoff.include_kernel_gate = false;
+    band_only.hash = policy_hash(&band_only.policy);
+    let mut mismatches = Vec::new();
+    for fixture in parity_fixtures() {
+        let state = fixture.session();
+        let considered: Vec<&fmeca::FailureModeView> = state
+            .failure_modes
+            .iter()
+            .filter(|v| v.disposition != Disposition::Excluded)
+            .collect();
+        if considered.iter().any(|v| v.criticality.is_none()) {
+            continue;
+        }
+        let kernel_rule = !considered.iter().any(|v| {
+            v.disposition == Disposition::Open
+                && matches!(
+                    v.residual_criticality,
+                    Some(fmeca::Level::Medium | fmeca::Level::High)
+                )
+        });
+        let pass = evaluate(&subject_from_state(&state), &band_only, as_of())
+            .unwrap()
+            .signoff
+            .pass;
+        if pass != kernel_rule {
+            mismatches.push(format!(
+                "{}: band-only pass={pass}, kernel band rule={kernel_rule}",
+                fixture.name
+            ));
+        }
+    }
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
+}
+
+// --- safety-critical against MIL-STD-882E Table III --------------------------
+
+/// MIL-STD-882E Table III: rows probability A (Frequent) .. E (Improbable),
+/// columns severity I (Catastrophic) .. IV (Negligible).
+const TABLE_III: [[&str; 4]; 5] = [
+    ["high", "high", "serious", "medium"],
+    ["high", "high", "serious", "medium"],
+    ["high", "serious", "medium", "low"],
+    ["serious", "medium", "medium", "low"],
+    ["medium", "medium", "medium", "low"],
+];
+
+#[test]
+fn safety_critical_matches_mil_std_882e_table_iii() {
+    let safety = preset("safety-critical").expect("safety-critical preset");
+    let cells = &safety.policy.matrices["nasa8004_5x5"].cells;
+    let mut mismatches = Vec::new();
+    for (i, row) in TABLE_III.iter().enumerate() {
+        for (j, expected) in row.iter().enumerate() {
+            // Probability A..E is column ordinal 5..1; severity I..IV is row
+            // ordinal 5..2.
+            let (s, p) = (5 - j, 5 - i);
+            let actual = &cells[s - 1][p - 1];
+            if actual != expected {
+                let letter = ["A", "B", "C", "D", "E"][i];
+                let roman = ["I", "II", "III", "IV"][j];
+                mismatches.push(format!(
+                    "{letter}/{roman} (row {s}, column {p}): {actual}, Table III says {expected}"
+                ));
+            }
+        }
+    }
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
+}
+
+/// The 3×3 analogue is the 5×5's middle: 3×3 severity and probability
+/// ordinal `k` is 5×5 ordinal `k + 1` (IV/III/II and D/C/B).
+#[test]
+fn safety_critical_3x3_is_the_middle_of_the_5x5() {
+    let safety = preset("safety-critical").expect("safety-critical preset");
+    let small = &safety.policy.matrices["qualitative3x3"].cells;
+    let large = &safety.policy.matrices["nasa8004_5x5"].cells;
+    let mismatches: Vec<String> = (0..3)
+        .flat_map(|s| (0..3).map(move |p| (s, p)))
+        .filter(|&(s, p)| small[s][p] != large[s + 1][p + 1])
+        .map(|(s, p)| format!("({}, {})", s + 1, p + 1))
         .collect();
+    assert!(mismatches.is_empty(), "{mismatches:?}");
+}
+
+// --- confidence-view: the maintainer's chart 2 -------------------------------
+
+#[test]
+fn confidence_view_cells_match_chart_2() {
+    let view = preset("confidence-view").expect("confidence-view preset");
+    let expected = [
+        ["none", "none", "none", "report", "report"],
+        ["none", "report", "report", "remediate", "remediate"],
+        ["report", "remediate", "remediate", "remediate", "remediate"],
+    ];
+    assert_eq!(view.policy.matrices["confidence"].cells, expected);
+}
+
+// --- required-action tailoring -----------------------------------------------
+
+/// One open, unmitigated, single-point runtime failure mode in the 3×3
+/// High/High cell, analysed at the implementation level.
+fn worst_case() -> Subject {
+    subject(
+        MatrixStrategy::Qualitative3x3,
+        Some(AnalysisLevel::Implementation),
+        vec![open_fm("fm1", Domain::Runtime, true, (3, 3))],
+    )
+}
+
+fn required_ids(preset_name: &str, subject: &Subject) -> Vec<String> {
+    let loaded = preset(preset_name).expect("preset");
+    evaluate(subject, &loaded, as_of()).unwrap().failure_modes[0]
+        .actions
+        .iter()
+        .filter(|a| a.required)
+        .map(|a| a.id.clone())
+        .collect()
+}
+
+#[test]
+fn every_tailored_required_action_becomes_required() {
+    let tailoring = [
+        ("standard", "design-review"),
+        ("business-critical", "design-review"),
+        ("business-critical", "prevention-before-detection"),
+        ("business-critical", "mitigate-single-point"),
+        ("safety-critical", "design-review"),
+        ("safety-critical", "prevention-before-detection"),
+        ("safety-critical", "test-and-inspection-evidence"),
+    ];
+    let subject = worst_case();
+    let missing: Vec<String> = tailoring
+        .iter()
+        .filter(|(p, id)| !required_ids(p, &subject).iter().any(|r| r == id))
+        .map(|(p, id)| format!("{p}: {id}"))
+        .collect();
+    assert!(missing.is_empty(), "not required: {missing:?}");
+}
+
+#[test]
+fn business_critical_accepted_single_point_in_review_needs_mitigation() {
+    let mut fm = open_fm("fm1", Domain::Runtime, true, (3, 3));
+    fm.disposition = Disposition::Accepted;
+    fm.accepted = Some(Accepted {
+        approver: "lead".into(),
+        at: Some("2026-10-01T00:00:00Z".into()),
+        rationale: "known".into(),
+    });
+    let loaded = preset("business-critical").expect("preset");
+    let s = evaluate(
+        &subject(MatrixStrategy::Qualitative3x3, None, vec![fm]),
+        &loaded,
+        as_of(),
+    )
+    .unwrap();
     assert!(
-        mismatches.is_empty(),
-        "compat-0.1 must equal the kernel gate:\n{}",
-        mismatches.join("\n")
+        s.rollups
+            .required_uncovered
+            .contains(&("fm1".to_string(), "mitigate-single-point".to_string()))
     );
+}
+
+#[test]
+fn business_critical_single_point_covered_by_implemented_prevention() {
+    let mut fm = open_fm("fm1", Domain::Runtime, true, (3, 3));
+    fm.mitigations.push(mitigation(
+        "m1",
+        MitigationKind::Prevention,
+        MitigationStatus::Implemented,
+        (3, 3),
+        vec![evidence(fmeca::EvidenceKind::Test, None)],
+    ));
+    fm.residual = Some((3, 3));
+    let loaded = preset("business-critical").expect("preset");
+    let s = evaluate(
+        &subject(MatrixStrategy::Qualitative3x3, None, vec![fm]),
+        &loaded,
+        as_of(),
+    )
+    .unwrap();
+    assert!(
+        !s.rollups
+            .required_uncovered
+            .iter()
+            .any(|(_, action)| action == "mitigate-single-point")
+    );
+}
+
+#[test]
+fn flag_procedural_only_fires_only_with_fail_fast_only_mitigation() {
+    let with = |id: &str, kind: MitigationKind| {
+        let mut fm = open_fm(id, Domain::Runtime, false, (3, 3));
+        fm.mitigations.push(mitigation(
+            &format!("{id}-m"),
+            kind,
+            MitigationStatus::Implemented,
+            (3, 3),
+            Vec::new(),
+        ));
+        fm.residual = Some((3, 3));
+        fm
+    };
+    let subject = subject(
+        MatrixStrategy::Qualitative3x3,
+        None,
+        vec![
+            with("fm-ff", MitigationKind::FailFast),
+            with("fm-prev", MitigationKind::Prevention),
+            open_fm("fm-none", Domain::Runtime, false, (3, 3)),
+        ],
+    );
+    let loaded = preset("safety-critical").expect("preset");
+    let flagged: Vec<String> = evaluate(&subject, &loaded, as_of())
+        .unwrap()
+        .failure_modes
+        .into_iter()
+        .filter(|f| f.actions.iter().any(|a| a.id == "flag-procedural-only"))
+        .map(|f| f.id)
+        .collect();
+    assert_eq!(flagged, vec!["fm-ff".to_string()]);
+}
+
+#[test]
+fn safety_critical_accepted_high_risk_fails_signoff() {
+    let s = evaluate(
+        &golden_mixed(),
+        &preset("safety-critical").expect("preset"),
+        as_of(),
+    )
+    .unwrap();
+    assert!(
+        s.signoff
+            .reasons
+            .contains(&"fm-acc: accepted in band 'high' which does not allow acceptance".into())
+    );
+}
+
+/// Only low-cost hygiene actions reach a failure mode in a preset's lowest
+/// band.
+#[test]
+fn lowest_band_failure_modes_get_only_hygiene_actions() {
+    const HYGIENE: [&str; 2] = ["secure-defaults", "adr-for-accepted-risk"];
+    let mut low = open_fm("fm-low", Domain::Runtime, false, (1, 1));
+    low.mitigations.push(mitigation(
+        "m1",
+        MitigationKind::Prevention,
+        MitigationStatus::Verified,
+        (1, 1),
+        vec![evidence(
+            fmeca::EvidenceKind::Test,
+            Some(fmeca::EvidenceBasis::OperationalUse),
+        )],
+    ));
+    low.residual = Some((1, 1));
+    let mut fms = golden_open().failure_modes;
+    fms.push(low);
+    let subject = subject(
+        MatrixStrategy::Qualitative3x3,
+        Some(AnalysisLevel::Implementation),
+        fms,
+    );
+    let mut extra = Vec::new();
+    for name in PRESET_NAMES {
+        let loaded = preset(name).expect("preset");
+        let lowest = loaded
+            .policy
+            .bands
+            .iter()
+            .min_by_key(|b| b.rank)
+            .map(|b| b.id.clone());
+        for fm in evaluate(&subject, &loaded, as_of()).unwrap().failure_modes {
+            if fm.effective_band != lowest {
+                continue;
+            }
+            for action in fm
+                .actions
+                .iter()
+                .filter(|a| !HYGIENE.contains(&a.id.as_str()))
+            {
+                extra.push(format!("{name} {}: {}", fm.id, action.id));
+            }
+        }
+    }
+    assert!(extra.is_empty(), "{extra:#?}");
 }
 
 // --- golden outputs ----------------------------------------------------------
@@ -486,7 +1019,7 @@ fn golden_mismatch(preset_name: &str, fixture: &str, subject: &Subject) -> Optio
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/golden")
         .join(format!("{preset_name}-{fixture}.json"));
-    if std::env::var_os("FMECA_BLESS").is_some() {
+    if std::env::var("FMECA_BLESS").as_deref() == Ok("1") {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, &actual).unwrap();
         return None;
@@ -513,36 +1046,44 @@ fn golden_for(preset_name: &str) -> Vec<String> {
 
 #[test]
 fn golden_compat_preset_matches_three_fixtures() {
-    assert!(golden_for("compat-0.1").is_empty());
+    let mismatches = golden_for("compat-0.1");
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
 fn golden_prototype_preset_matches_three_fixtures() {
-    assert!(golden_for("prototype").is_empty());
+    let mismatches = golden_for("prototype");
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
 fn golden_standard_preset_matches_three_fixtures() {
-    assert!(golden_for("standard").is_empty());
+    let mismatches = golden_for("standard");
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
 fn golden_business_critical_preset_matches_three_fixtures() {
-    assert!(golden_for("business-critical").is_empty());
+    let mismatches = golden_for("business-critical");
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
 fn golden_safety_critical_preset_matches_three_fixtures() {
-    assert!(golden_for("safety-critical").is_empty());
+    let mismatches = golden_for("safety-critical");
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 #[test]
 fn golden_confidence_view_preset_matches_three_fixtures() {
-    assert!(golden_for("confidence-view").is_empty());
+    let mismatches = golden_for("confidence-view");
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
 }
 
 // --- docs --------------------------------------------------------------------
 
+/// `docs/policies.md` has a section per preset and states that a `note` is
+/// C0 whatever its basis.
 #[test]
 fn docs_list_every_preset() {
     let doc = std::fs::read_to_string(concat!(
@@ -550,10 +1091,19 @@ fn docs_list_every_preset() {
         "/../../docs/policies.md"
     ))
     .expect("docs/policies.md");
-    let missing: Vec<&str> = PRESET_NAMES
-        .iter()
-        .copied()
-        .filter(|name| !doc.contains(name))
+    let headings: BTreeSet<&str> = doc
+        .lines()
+        .filter_map(|l| l.strip_prefix("### "))
+        .map(str::trim)
         .collect();
+    let mut missing: Vec<String> = PRESET_NAMES
+        .iter()
+        .filter(|name| !headings.contains(*name))
+        .map(|name| format!("### {name}"))
+        .collect();
+    const NOTE_SENTENCE: &str = "A **`note` is C0 whatever its basis**";
+    if !doc.contains(NOTE_SENTENCE) {
+        missing.push(NOTE_SENTENCE.to_string());
+    }
     assert!(missing.is_empty(), "docs/policies.md missing: {missing:?}");
 }

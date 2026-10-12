@@ -8,7 +8,10 @@ log, so one analysis can be read under several policies.
 
 Policies are TOML: built-in **presets** (below) or project files in
 `.fmeca/policies/<name>.toml`. A policy's identity is its `name` plus the
-sha256 hash of its canonical form; every query reports both.
+sha256 hash of its canonical form; every query reports both. A preset's hash
+covers the preset **with the built-in action catalog merged in**, so a catalog
+change changes every preset hash that includes it; a project policy's hash
+covers only the file as written, and the catalog is merged at query time.
 
 ## The policy document
 
@@ -26,7 +29,9 @@ A policy has:
   rank never decreases as severity or probability increases.
 - **`signoff`** — the band above which a residual fails (`max_residual_band`),
   whether an acceptance counts as a pass (`accepted_counts_as_pass`, default
-  `true`), whether an overdue acceptance then fails
+  `true`; an acceptance counts only when the effective band's `dispositions`
+  include `accept`, otherwise sign-off fails with `<fm>: accepted in band '<b>'
+  which does not allow acceptance`), whether an overdue acceptance then fails
   (`accepted_requires_review_current`, default `false`), and whether the
   kernel's readiness blockers are added to the sign-off reasons
   (`include_kernel_gate`, default `true`; every built-in preset sets it to
@@ -37,11 +42,27 @@ A policy has:
 Actions carry a `precedence` (MIL-STD-882E §4.3.4, adapted):
 `eliminate` → `prevent` → `detect` → `contain` → `procedure`. They are
 returned in that order, with `applies_when` deciding whether they are
-suggested and `required_when` deciding whether they are required. An action of
-precedence `prevent` / `detect` / `contain` is marked `covered_by` an active
-mitigation of kind `prevention` / `detection` / `fail_fast`; `eliminate` and
-`procedure` are never auto-covered. Required actions with no `covered_by` fail
-sign-off.
+suggested and `required_when` deciding whether they are required. The order is
+a presentation, **not enforcement**: nothing stops a team from adding a
+detection before a prevention. What is enforced is `required_when`.
+
+An action of precedence `prevent` / `detect` / `contain` is marked
+`covered_by` an implemented or verified mitigation of kind `prevention` /
+`detection` / `fail_fast`; `eliminate` and `procedure` are never auto-covered.
+A required action with no `covered_by` fails sign-off. A required `eliminate`
+or `procedure` action therefore keeps failing sign-off until its
+`required_when` stops holding (for example, the failure mode is mitigated
+below the band, or its evidence reaches the named confidence) — acceptance
+alone does not clear it.
+
+`applies_when` / `required_when` keys (all optional; every key present must
+hold): `band_at_least`, `band_in`, `rank_at_least` (the effective band's rank
+is at least N — band-agnostic, so the shared catalog can use it; an unscored
+failure mode never matches), `level_in`, `domain_in`, `response_class_in`,
+`single_point`, `confidence_below`, `confidence_at_least`, `disposition_in`,
+`fallback`, `class_in`, `mitigation_kinds_missing` (no active mitigation of
+these kinds) and `mitigation_kinds_present` (at least one active mitigation of
+these kinds).
 
 ## Confidence ladder
 
@@ -67,6 +88,10 @@ When the confidence is below it, the **inherent** band is effective instead,
 and the result carries `fallback {from, to, reason}`. A fallback only ever
 raises the band: low confidence never lowers a residual, and a fallback is
 only reported when the inherent band ranks above the residual band.
+
+Under `confidence-view`, the fallback is computed under the `standard` preset,
+so `fallback {from, to}` name **standard's** bands (`none` / `compensate` /
+`review`), not `confidence-view`'s own.
 
 ## Presets
 
@@ -163,8 +188,16 @@ compensate review     review     review     review
 ```
 
 `signoff.max_residual_band = "compensate"`, `accepted_requires_review_current
-= true`. Required-action tailoring: `design-review` on `review` for the
-`business-critical` and `safety-critical` classes.
+= true`.
+
+Required-action tailoring: `design-review` is **required** when the effective
+band is `review` (`required_when = { band_at_least = "review" }`). It is only
+suggested — and so only required — at the `technical_plan` and
+`implementation` levels (`applies_when` has `level_in`); an analysis with no
+level, or at another level, gets no design review from `standard`. Because
+`design-review` is an `eliminate` action, which nothing covers, a `review`
+failure mode at those levels fails sign-off until it is mitigated below
+`review`, even when accepted.
 
 ### business-critical
 
@@ -176,10 +209,20 @@ The `standard` bands with tighter evidence and tailoring.
 | `compensate` | 1 | `mitigate`, `watch`, `accept` | C2 | `tech_lead` | 90d |
 | `review` | 2 | `mitigate`, `research`, `elevate`, `accept` | C3 | `eng_manager` (+ `tech_lead`, `product_owner`) | 90d |
 
-The cell tables are those of `standard`. Additional required actions: on a
-`review` risk, an engineered **prevention** must exist before detection
-(`require-prevention`), and a single point of failure in `review` must be
-mitigated (`mitigate-single-point`). `signoff.max_residual_band = "compensate"`.
+The cell tables are those of `standard`. `signoff.max_residual_band =
+"compensate"`.
+
+Required actions, at every analysis level, when the effective band is
+`review`:
+
+| Action | `required_when` | Covered by |
+|---|---|---|
+| `design-review` | `band_at_least = "review"` | nothing (`eliminate`): mitigate below `review` |
+| `prevention-before-detection` | `band_at_least = "review"`, `mitigation_kinds_missing = ["prevention"]` | holds only while no active prevention exists |
+| `mitigate-single-point` | `band_at_least = "review"`, `single_point = true` | an implemented or verified `prevention` mitigation |
+
+So a single point of failure left in `review` — even an accepted one — fails
+sign-off until an implemented prevention covers it.
 
 ### safety-critical
 
@@ -192,29 +235,48 @@ MIL-STD-882E risk assessment codes: `low` / `medium` / `serious` / `high`.
 | `serious` | 2 | `mitigate`, `research`, `elevate`, `accept` | C3 | `eng_manager` (+ `product_owner`) | 90d |
 | `high` | 3 | `mitigate`, `elevate` (not acceptable) | C3 | — | 90d |
 
-`qualitative3x3` (analogue):
+`nasa8004_5x5` is MIL-STD-882E Table III. Columns are probability ordinals
+1..5 = E Improbable, D Remote, C Occasional, B Probable, A Frequent. Severity
+IV..I (Negligible, Marginal, Critical, Catastrophic) map to rows 2..5; row 1
+is one band below Negligible.
+
+```text
+row 1 (below IV)   low    low     low     low     low
+row 2 (IV)         low    low     low     medium  medium
+row 3 (III)        medium medium  medium  serious serious
+row 4 (II)         medium medium  serious high    high
+row 5 (I)          medium serious high    high    high
+                   E      D       C       B       A
+```
+
+`qualitative3x3` is the analogue: the middle of the 5×5 (rows and columns
+2..4). 3×3 severity Low / Medium / High stands for Negligible IV / Marginal
+III / Critical II, and probability Low / Medium / High for Remote D /
+Occasional C / Probable B:
 
 ```text
 low    low     medium
-low    medium  serious
+medium medium  serious
 medium serious high
 ```
 
-`nasa8004_5x5` (MIL-STD-882E severity IV..I map to rows 2..5; row 1 is
-one band below marginal):
+`signoff.max_residual_band = "medium"`. `high` does not list `accept`, so an
+accepted `high` risk fails sign-off (`accepted in band 'high' which does not
+allow acceptance`).
 
-```text
-low    low     low     low     low
-low    low     low     medium  medium
-low    medium  medium  serious serious
-medium serious serious high    high
-medium serious high    high    high
-```
+Required-action tailoring, at every analysis level:
 
-`signoff.max_residual_band = "medium"`. Required-action tailoring: an
-engineered prevention is required for `serious` and `high`; procedural-only
-mitigation is flagged; the design order of precedence is enforced by action
-ordering.
+| Action | `required_when` | Covered by |
+|---|---|---|
+| `design-review` | `band_at_least = "serious"` | nothing (`eliminate`): mitigate below `serious` |
+| `prevention-before-detection` | `band_at_least = "serious"`, `mitigation_kinds_missing = ["prevention"]` | holds only while no active prevention exists |
+| `test-and-inspection-evidence` | `band_at_least = "serious"`, `confidence_below = "C3"` | nothing (`procedure`): holds until the residual's evidence reaches C3 |
+
+`flag-procedural-only` is suggested (not required) on `serious` and `high`
+when mitigations exist but all of them are `fail_fast`
+(`mitigation_kinds_present = ["fail_fast"]`, `mitigation_kinds_missing =
+["prevention", "detection"]`). The design order of precedence is presented by
+action ordering only; it is not enforced beyond the required actions above.
 
 ### confidence-view
 
@@ -232,23 +294,45 @@ The maintainer's chart 2: the effective band is read from a matrix of the
 rank 0/1/2, columns C4 C3 C2 C1 C0):
 
 ```text
-none   none   none      none      report
-none   report report    remediate remediate
-report report remediate remediate remediate
+                C4     C3        C2        C1        C0
+none            none   none      none      report    report
+compensate      none   report    report    remediate remediate
+review          report remediate remediate remediate remediate
 ```
 
+The cells are the maintainer's chart 2. The chart's Confidence scale
+Absolute / High / Moderate / Slight / None maps to C4 / C3 / C2 / C1 / C0, and
+its Risk columns 1 / 3 / 5 map to `standard`'s `none` / `compensate` /
+`review`.
+
+The row is `standard`'s **effective** band, which already includes standard's
+own fallback (a low-confidence residual falls back to its inherent band). Low
+confidence therefore counts on both axes: once in choosing the row, and again
+in choosing the column. Any `fallback {from, to}` reported under
+`confidence-view` names standard's bands.
+
 The S×P matrices are the `standard` layout mapped to this preset's bands
-(`none` → `none`, `compensate` → `report`, `review` → `remediate`).
-`signoff.max_residual_band = "report"`.
+(`none` → `none`, `compensate` → `report`, `review` → `remediate`); they give
+the inherent and residual bands. `signoff.max_residual_band = "report"`.
 
 ## Built-in action catalog
 
 `include_builtin_actions = true` merges the shared catalog in
-`crates/fmeca-policy/presets/actions.toml` (28 actions over the tags `design`,
-`review`, `test`, `ops`, `process`, `docs` and `security`). Catalog conditions
-are band-agnostic on purpose — every preset has its own band vocabulary — and
-use confidence, domain, level, response class, disposition, single-point,
-missing mitigation kinds, fallback and class.
+`crates/fmeca-policy/presets/actions.toml` (29 actions over the tags `design`,
+`review`, `test`, `ops`, `process`, `docs` and `security`). A preset's own
+action with the same id replaces the built-in one. Catalog conditions are
+band-agnostic — every preset has its own band vocabulary — so the catalog
+gates on `rank_at_least` (rank 0 is every preset's lowest band):
+
+- low-cost hygiene is not gated on rank: `secure-defaults` (security domain)
+  and `adr-for-accepted-risk` (accepted risks);
+- every other action needs `rank_at_least = 1`, so a failure mode in the
+  lowest band gets few or no suggestions;
+- expensive actions need `rank_at_least = 2`, and a domain or single-point
+  condition where it fits: `threat-model` and `penetration-test` (security),
+  `chaos-experiment` (runtime single point), `load-test`, `slo-error-budget`,
+  `backup-restore-test`, `documented-runbook`, `simplify-design`,
+  `design-review`.
 
 ## Sources
 
