@@ -1,0 +1,121 @@
+{
+  "policy": {
+    "name": "confidence-view",
+    "hash": "30027bb291a264929f4a3052f84ae42af9748f5061caebd8232298aa0aa78cb9",
+    "class": "confidence-view",
+    "matrix_derived_from": "standard-bands",
+    "source": "preset"
+  },
+  "as_of": "2026-10-12",
+  "failure_modes": [
+    {
+      "id": "fm-m",
+      "inherent_band": "remediate",
+      "residual_band": "report",
+      "effective_band": "report",
+      "confidence": "C3",
+      "fallback": null,
+      "status": {
+        "state": "open",
+        "suggested": "mitigate"
+      },
+      "rationale_needed": false,
+      "actions": [
+        {
+          "id": "dependency-pinning-update-policy",
+          "text": "Pin dependencies and adopt a reviewed update policy",
+          "tags": [
+            "process",
+            "security"
+          ],
+          "precedence": "prevent",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "domain delivery"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "idempotency-retry-backoff",
+          "text": "Make the operation idempotent and retry with backoff",
+          "tags": [
+            "design",
+            "ops"
+          ],
+          "precedence": "prevent",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "domain delivery"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "canary-automatic-rollback",
+          "text": "Canary the change with automatic rollback",
+          "tags": [
+            "ops"
+          ],
+          "precedence": "contain",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "response_class restructure"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "data-migration-rehearsal",
+          "text": "Rehearse the data migration on a production-like copy",
+          "tags": [
+            "process",
+            "ops"
+          ],
+          "precedence": "contain",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "domain delivery"
+          ],
+          "covered_by": []
+        },
+        {
+          "id": "feature-flag-staged-rollout",
+          "text": "Put the change behind a feature flag and roll out in stages",
+          "tags": [
+            "ops",
+            "design"
+          ],
+          "precedence": "contain",
+          "required": false,
+          "why": [
+            "band report rank 1 ≥ 1",
+            "domain delivery"
+          ],
+          "covered_by": []
+        }
+      ]
+    }
+  ],
+  "excluded": [],
+  "rollups": {
+    "by_band": {
+      "report": 1
+    },
+    "by_confidence": {
+      "C3": 1
+    },
+    "by_status": {
+      "open": 1
+    },
+    "required_uncovered": [],
+    "accepted_by_role": {},
+    "review_overdue": [],
+    "fallbacks": []
+  },
+  "signoff": {
+    "pass": true,
+    "reasons": []
+  }
+}

@@ -25,13 +25,18 @@
 //! 6. **Actions**: the catalog actions whose `applies_when` holds, sorted by
 //!    precedence then id, marked required and covered.
 //!
+//! **Sign-off**: an effective band above `max_residual_band` fails unless the
+//! failure mode is accepted, `accepted_counts_as_pass` holds, the review is
+//! not overdue (when `accepted_requires_review_current`), and the effective
+//! band's `dispositions` include `accept`.
+//!
 //! # Confidence-view policies
 //!
 //! A policy with a `confidence` matrix maps (standard band rank, confidence)
 //! to its own band. The standard band is the effective band computed under
-//! the built-in `standard` preset. Until Task 3 adds that preset,
-//! [`evaluate`] computes it under the policy's own S×P matrix and bands; the
-//! row is the band's position in rank order.
+//! the built-in `standard` preset; [`evaluate`] supplies it through the
+//! crate-private [`evaluate_with`] hook, together with the built-in action
+//! catalog.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -281,7 +286,9 @@ pub struct ActionSuggestion {
     /// The facts that matched `applies_when` (and `required_when`, prefixed
     /// `required: `).
     pub why: Vec<String>,
-    /// Active mitigations that already satisfy the action.
+    /// Active mitigations that already satisfy the action, or
+    /// [`ACCEPTANCE`] (`"acceptance"`) for a required `eliminate` /
+    /// `procedure` action satisfied by an allowed, reasoned acceptance.
     pub covered_by: Vec<String>,
 }
 
@@ -383,16 +390,17 @@ const UNSCORED: &str = "unscored";
 /// the subject's strategy; [`PolicyError::Invalid`] only for a policy that
 /// was not [validated](crate::validate()).
 ///
-/// Built-in actions (`include_builtin_actions`) and the `standard` preset for
-/// confidence matrices arrive with the presets (Task 3); until then the
-/// built-in catalog is empty and a confidence matrix reads its rows from the
-/// policy's own S×P bands.
+/// Built-in actions (`include_builtin_actions`) come from the shared catalog,
+/// and a `confidence` matrix reads its rows from the built-in `standard`
+/// preset, both supplied through the crate-private `evaluate_with`.
 pub fn evaluate(
     subject: &Subject,
     policy: &LoadedPolicy,
     as_of: Date,
 ) -> Result<Suggestions, PolicyError> {
-    evaluate_with(subject, policy, None, &[], as_of)
+    let standard = crate::presets::standard_policy();
+    let builtin = crate::presets::builtin_actions();
+    evaluate_with(subject, policy, standard.as_ref(), &builtin, as_of)
 }
 
 /// [`evaluate`] with the `standard` preset (for confidence matrices; `None`
@@ -460,6 +468,8 @@ pub(crate) fn evaluate_with(
         }
         let mut accepted_ok = false;
         let mut overdue = false;
+        // An acceptance counts only in a band whose dispositions allow it.
+        let mut acceptance_not_allowed = false;
         let status_key = match &suggestion.status {
             DispositionStatus::Unscored { .. } => "unscored",
             DispositionStatus::Open { .. } => "open",
@@ -478,10 +488,15 @@ pub(crate) fn evaluate_with(
                 }
                 // "Overdue" is the reason only when the acceptance would
                 // otherwise have counted as a pass.
+                acceptance_not_allowed = policy.signoff.accepted_counts_as_pass
+                    && banded
+                        .effective
+                        .is_some_and(|b| !b.dispositions.contains(&DispositionKind::Accept));
                 overdue = policy.signoff.accepted_counts_as_pass
                     && *review_due
                     && policy.signoff.accepted_requires_review_current;
-                accepted_ok = policy.signoff.accepted_counts_as_pass && !overdue;
+                accepted_ok =
+                    policy.signoff.accepted_counts_as_pass && !overdue && !acceptance_not_allowed;
                 "accepted"
             }
         };
@@ -493,7 +508,12 @@ pub(crate) fn evaluate_with(
             && effective.rank > max_band.rank
             && !accepted_ok
         {
-            reasons.push(if overdue {
+            reasons.push(if acceptance_not_allowed {
+                format!(
+                    "{}: accepted in band '{}' which does not allow acceptance",
+                    fm.id, effective.id
+                )
+            } else if overdue {
                 format!(
                     "{}: accepted risk in band `{}` is overdue for review",
                     fm.id, effective.id
@@ -754,7 +774,12 @@ fn suggest(
             precedence: action.precedence,
             required: required.is_some(),
             why,
-            covered_by: covered_by(action.precedence, fm),
+            covered_by: if required.is_some() && acceptance_covers(action.precedence, fm, effective)
+            {
+                vec![ACCEPTANCE.to_string()]
+            } else {
+                covered_by(action.precedence, fm)
+            },
         });
     }
 
@@ -812,6 +837,22 @@ fn suggested_disposition(band: &Band, low_confidence: bool) -> DispositionKind {
     }
 }
 
+/// The `covered_by` marker for a required action satisfied by an acceptance.
+pub const ACCEPTANCE: &str = "acceptance";
+
+/// A required `eliminate` or `procedure` action, which no mitigation kind
+/// covers, is satisfied by a recorded acceptance with a non-empty rationale in
+/// an effective band whose dispositions allow `accept`.
+fn acceptance_covers(precedence: Precedence, fm: &SubjectFm, effective: Option<&Band>) -> bool {
+    matches!(precedence, Precedence::Eliminate | Precedence::Procedure)
+        && fm.disposition == fmeca::Disposition::Accepted
+        && fm
+            .accepted
+            .as_ref()
+            .is_some_and(|a| !a.rationale.trim().is_empty())
+        && effective.is_some_and(|b| b.dispositions.contains(&DispositionKind::Accept))
+}
+
 /// Implemented or verified mitigations of the kind that satisfies
 /// `precedence`: prevent → prevention, detect → detection, contain →
 /// fail-fast. Planned and abandoned mitigations do not cover; eliminate and
@@ -866,6 +907,15 @@ impl Facts<'_> {
             require!(
                 effective.rank >= threshold.rank,
                 format!("band {} ≥ {}", effective.id, threshold.id)
+            );
+        }
+        if let Some(at_least) = c.rank_at_least {
+            let Some(effective) = self.effective else {
+                return Ok(None);
+            };
+            require!(
+                effective.rank >= at_least,
+                format!("band {} rank {} ≥ {at_least}", effective.id, effective.rank)
             );
         }
         if let Some(bands) = &c.band_in {
@@ -940,6 +990,19 @@ impl Facts<'_> {
                     .iter()
                     .any(|m| m.is_active() && kinds.contains(&m.kind)),
                 format!("no {} mitigation", missing.join("/"))
+            );
+        }
+        if let Some(kinds) = &c.mitigation_kinds_present {
+            let present: Vec<String> = self
+                .fm
+                .mitigations
+                .iter()
+                .filter(|m| m.is_active() && kinds.contains(&m.kind))
+                .map(|m| name(&m.kind))
+                .collect();
+            require!(
+                !present.is_empty(),
+                format!("{} mitigation present", present.join("/"))
             );
         }
         Ok(Some(why))

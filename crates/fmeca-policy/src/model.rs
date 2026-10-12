@@ -154,6 +154,12 @@ pub struct Conditions {
     pub class_in: Option<Vec<String>>,
     /// None of the active mitigations is of any of these kinds.
     pub mitigation_kinds_missing: Option<Vec<fmeca::MitigationKind>>,
+    /// At least one active mitigation is of one of these kinds.
+    pub mitigation_kinds_present: Option<Vec<fmeca::MitigationKind>>,
+    /// The effective band's rank is at least this. Band-agnostic, so the
+    /// shared action catalog can use it across presets; an unscored failure
+    /// mode never matches.
+    pub rank_at_least: Option<u8>,
 }
 
 /// A suggested action.

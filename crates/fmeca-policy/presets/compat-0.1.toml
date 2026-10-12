@@ -1,0 +1,47 @@
+# `compat-0.1` — the default policy and the backwards-compatibility gate
+# (spec §6). Its sign-off equals `readiness.assess` from fmeca 0.1: a Low
+# residual is `none`, a Medium/High residual is `mitigate`, and anything above
+# `none` fails unless accepted.
+
+name = "compat-0.1"
+description = "Backwards-compatible gate: equals the fmeca 0.1 readiness gate"
+class = "compat-0.1"
+schema = 1
+include_builtin_actions = false
+
+[[bands]]
+id = "none"
+label = "No action"
+rank = 0
+dispositions = ["close", "accept"]
+
+[[bands]]
+id = "mitigate"
+label = "Reduce to Low"
+rank = 1
+dispositions = ["mitigate", "watch", "accept"]
+no_action_needs_rationale = true
+
+[matrices.qualitative3x3]
+derived_from = "qualitative3x3"
+cells = [
+  ["none",     "none",     "mitigate"],
+  ["none",     "mitigate", "mitigate"],
+  ["mitigate", "mitigate", "mitigate"],
+]
+
+[matrices.nasa8004_5x5]
+derived_from = "nasa8004_5x5"
+cells = [
+  ["none",     "none",     "none",     "mitigate", "mitigate"],
+  ["none",     "none",     "mitigate", "mitigate", "mitigate"],
+  ["none",     "mitigate", "mitigate", "mitigate", "mitigate"],
+  ["mitigate", "mitigate", "mitigate", "mitigate", "mitigate"],
+  ["mitigate", "mitigate", "mitigate", "mitigate", "mitigate"],
+]
+
+[signoff]
+max_residual_band = "none"
+accepted_counts_as_pass = true
+accepted_requires_review_current = false
+include_kernel_gate = true

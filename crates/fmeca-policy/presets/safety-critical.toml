@@ -1,0 +1,110 @@
+# `safety-critical` — MIL-STD-882E RAC layout (low / medium / serious / high)
+# for work where the cost of failure is unacceptable. `high` is not acceptable:
+# it can only be mitigated or elevated.
+
+name = "safety-critical"
+description = "MIL-STD-882E risk assessment codes for safety-critical work"
+class = "safety-critical"
+schema = 1
+include_builtin_actions = true
+
+[[bands]]
+id = "low"
+label = "Low risk"
+rank = 0
+dispositions = ["close", "accept"]
+
+[[bands]]
+id = "medium"
+label = "Medium risk"
+rank = 1
+dispositions = ["mitigate", "watch", "accept"]
+no_action_needs_rationale = true
+min_confidence = "C2"
+
+[[bands]]
+id = "serious"
+label = "Serious risk"
+rank = 2
+dispositions = ["mitigate", "research", "elevate", "accept"]
+no_action_needs_rationale = true
+min_confidence = "C3"
+acceptance = "eng_manager"
+concurrence = ["product_owner"]
+review_interval = "90d"
+
+[[bands]]
+id = "high"
+label = "High risk — not acceptable"
+rank = 3
+dispositions = ["mitigate", "elevate"]
+no_action_needs_rationale = true
+min_confidence = "C3"
+review_interval = "90d"
+
+[matrices.qualitative3x3]
+derived_from = "qualitative3x3"
+# The 3x3 analogue samples the 5x5 below at its middle three rows and columns:
+# 3x3 severity Low/Medium/High = MIL-STD-882E Negligible IV / Marginal III /
+# Critical II (5x5 rows 2..4); probability Low/Medium/High = Remote D /
+# Occasional C / Probable B (5x5 columns 2..4).
+cells = [
+  ["low",    "low",     "medium"],
+  ["medium", "medium",  "serious"],
+  ["medium", "serious", "high"],
+]
+
+[matrices.nasa8004_5x5]
+derived_from = "nasa8004_5x5"
+# MIL-STD-882E Table III. Rows are severity ordinal 1..5 (top = 1); columns
+# are probability ordinal 1..5 = E Improbable, D Remote, C Occasional,
+# B Probable, A Frequent. Severity IV..I (Negligible, Marginal, Critical,
+# Catastrophic) map to rows 2..5; row 1 is one band below Negligible.
+cells = [
+  ["low",    "low",     "low",     "low",     "low"],
+  ["low",    "low",     "low",     "medium",  "medium"],
+  ["medium", "medium",  "medium",  "serious", "serious"],
+  ["medium", "medium",  "serious", "high",    "high"],
+  ["medium", "serious", "high",    "high",    "high"],
+]
+
+[signoff]
+max_residual_band = "medium"
+accepted_counts_as_pass = true
+accepted_requires_review_current = true
+include_kernel_gate = true
+
+# Required-action tailoring. Precedence orders the suggestions; it is not
+# enforced. What is enforced is `required_when`: a required action with no
+# `covered_by` fails sign-off.
+
+[[actions]]
+id = "design-review"
+text = "Hold a design review of this hazard with a second engineer and record the outcome"
+tags = ["review", "design"]
+precedence = "eliminate"
+applies_when = { band_at_least = "serious" }
+required_when = { band_at_least = "serious" }
+
+[[actions]]
+id = "prevention-before-detection"
+text = "Provide an engineered prevention for this serious or high hazard before relying on detection"
+tags = ["design"]
+precedence = "prevent"
+applies_when = { band_at_least = "serious" }
+required_when = { band_at_least = "serious", mitigation_kinds_missing = ["prevention"] }
+
+[[actions]]
+id = "test-and-inspection-evidence"
+text = "Attach test and inspection evidence to the mitigations that reduce this hazard"
+tags = ["test", "review"]
+precedence = "procedure"
+applies_when = { band_at_least = "serious" }
+required_when = { band_at_least = "serious", confidence_below = "C3" }
+
+[[actions]]
+id = "flag-procedural-only"
+text = "Justify why fail-fast handling alone is adequate for this serious or high hazard"
+tags = ["process", "docs"]
+precedence = "procedure"
+applies_when = { band_at_least = "serious", mitigation_kinds_present = ["fail_fast"], mitigation_kinds_missing = ["prevention", "detection"] }
