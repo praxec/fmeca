@@ -165,7 +165,7 @@ jobs:
           set -euo pipefail
           gh release upload "$TAG" dist/checksums.sha256 dist/release-manifest.json \
             scripts/install.sh scripts/install.ps1 --clobber
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # Packs the npm launcher (npm/) and attaches the tarball with its digest.
@@ -215,7 +215,7 @@ jobs:
       # The checkout supplies scripts/npm-publish.sh, which skips a version
       # already on npm and sends pre-releases to the `next` dist-tag.
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
