@@ -468,13 +468,16 @@ fn all_project_install_prints_an_untyped_gemini_snippet() {
         .lines()
         .skip_while(|l| l.trim() != "Gemini (.gemini/settings.json):")
         .nth(1)
-        .map(str::trim)
-        .map(str::to_string);
+        .and_then(|l| serde_json::from_str::<serde_json::Value>(l.trim()).ok());
+    // Compared as parsed JSON: key order depends on serde_json's
+    // `preserve_order`, which only the default features enable.
     assert_eq!(
-        gemini_snippet.as_deref(),
-        Some(
-            r#"{"mcpServers":{"fmeca":{"command":"npx","args":["-y","@matthew-cochran/fmeca"]}}}"#
-        )
+        gemini_snippet,
+        Some(serde_json::json!({
+            "mcpServers": {
+                "fmeca": { "command": "npx", "args": ["-y", "@matthew-cochran/fmeca"] }
+            }
+        }))
     );
 }
 
@@ -1060,9 +1063,23 @@ fn help_flag_lists_the_skills_command() {
 fn copilot_project_install_prints_the_dot_mcp_json_snippet() {
     let dir = TempDir::new().unwrap();
     let out = stdout(&install(dir.path(), "copilot", &[]));
-    assert!(out.contains(
-        "Add to .mcp.json:\n  {\"mcpServers\":{\"fmeca\":{\"type\":\"stdio\",\"command\":\"npx\""
-    ));
+    // Compared as parsed JSON: key order depends on serde_json's
+    // `preserve_order`, which only the default features enable.
+    let server = out
+        .lines()
+        .skip_while(|l| l.trim() != "Add to .mcp.json:")
+        .nth(1)
+        .and_then(|l| serde_json::from_str::<serde_json::Value>(l.trim()).ok())
+        .map(|v| v["mcpServers"]["fmeca"].clone());
+    assert_eq!(
+        server,
+        Some(serde_json::json!({
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@matthew-cochran/fmeca"]
+        })),
+        "{out}"
+    );
 }
 
 #[test]
