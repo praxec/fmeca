@@ -212,3 +212,19 @@ jobs:
         run: bash scripts/junior-contract-check.sh target/debug/fmeca-mcp
       - name: negative self-test (renamed target must fail)
         run: bash scripts/junior-contract-check.test.sh
+  server-json:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      # Pinned release + checksum, copied from release.yml.
+      MCP_PUBLISHER_VERSION: v1.8.1
+      MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+    steps:
+      - uses: actions/checkout@v7
+      - name: validate server.json against the MCP registry schema
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz" -o mcp-publisher.tgz
+          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tgz" | sha256sum -c -
+          tar xzf mcp-publisher.tgz mcp-publisher
+          ./mcp-publisher validate
