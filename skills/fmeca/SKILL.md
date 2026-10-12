@@ -1,6 +1,6 @@
 ---
 name: fmeca
-description: "Use when you need the method reference behind the fmeca-* skills, or when no narrower fmeca skill fits a task that uses the fmeca-mcp tools (session.open, session.list, append, state.get, risk.next, readiness.assess, report.export, scoring.catalog, analyze, vet). Covers what an FMECA is, observations instead of scores, the 3x3 and NASA 5x5 matrices, the prevention, detection, fail_fast order, residual risk and standing, the ready and verified.ready gates, the .fmeca/ project store and its <aspect>-<level> session ids, parent links and refs between analyses, and the core loop that every level skill runs."
+description: "Use when you need the method reference behind the fmeca-* skills, or when no narrower fmeca skill fits a task that uses the fmeca-mcp tools (session.open, session.list, append, state.get, risk.next, readiness.assess, report.export, scoring.catalog, analyze, vet, actions.suggest, policy.list). Covers what an FMECA is, observations instead of scores, the 3x3 and NASA 5x5 matrices, the prevention, detection, fail_fast order, residual risk and standing, the ready and verified.ready gates, the .fmeca/ project store and its <aspect>-<level> session ids, parent links and refs between analyses, and the core loop that every level skill runs."
 ---
 
 # FMECA with fmeca-mcp
@@ -17,9 +17,10 @@ and `conops`), [fmeca-technical-plan](../fmeca-technical-plan/SKILL.md),
 [fmeca-project-plan](../fmeca-project-plan/SKILL.md),
 [fmeca-implementation](../fmeca-implementation/SKILL.md) and
 [fmeca-verification](../fmeca-verification/SKILL.md). Then come
-[fmeca-resolve](../fmeca-resolve/SKILL.md), [fmeca-vet](../fmeca-vet/SKILL.md) and
-[fmeca-signoff](../fmeca-signoff/SKILL.md). What each level reads and the link rules are in
-[levels.md](levels.md). A one-shot input: [examples/one-shot-analyze.json](examples/one-shot-analyze.json).
+[fmeca-resolve](../fmeca-resolve/SKILL.md), [fmeca-vet](../fmeca-vet/SKILL.md),
+[fmeca-policy](../fmeca-policy/SKILL.md) and
+[fmeca-signoff](../fmeca-signoff/SKILL.md). What each level reads and the link rules are
+in [levels.md](levels.md). A one-shot input: [examples/one-shot-analyze.json](examples/one-shot-analyze.json).
 
 ## 1. The project store
 
@@ -133,7 +134,16 @@ Every level skill runs this loop:
 For a quick, throwaway pass with no session, call `analyze` with the whole batch (see the
 example). It uses the same computation and writes nothing.
 
-## 8. vet is advisory
+## 8. Risk policies
+
+The kernel gates above are fixed. A **risk policy** is a second, configurable reading of the
+same analysis: the project's own risk bands, a sign-off rule and tagged actions to take.
+`actions.suggest` computes it at query time and never writes to the log or changes a score;
+`policy.list` shows the presets and the project's `.fmeca/policies/` files. Default
+`compat-0.1` gives the same verdict as `readiness.assess`. See
+[fmeca-policy](../fmeca-policy/SKILL.md) and [docs/policies.md](../../docs/policies.md).
+
+## 9. vet is advisory
 
 `vet` asks Jev, a calibrated judgment model, for probabilities about your observations,
 mitigations, coverage and readiness. It never writes and never changes a score or a gate.

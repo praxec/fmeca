@@ -5,12 +5,13 @@
 ## Install and use
 
 - [Agent install guide](docs/AGENT-INSTALL.md): MCP config and skills install for Claude Code, Claude Desktop, Codex, Cursor, VS Code/Copilot, Gemini CLI and AGENTS.md, plus how to keep analyses in `.fmeca/`.
-- [README](README.md): install options, MCP client config, configuration variables and the tool table (session.open, append, state.get, risk.next, readiness.assess, report.export, scoring.catalog, analyze, session.list, vet).
+- [README](README.md): install options, MCP client config, configuration variables and the tool table (session.open, append, state.get, risk.next, readiness.assess, report.export, scoring.catalog, analyze, session.list, vet, actions.suggest, policy.list).
 - [Tool matrix](docs/agents/tool-matrix.md): per-client skill and MCP paths, checked against each client's docs.
+- [Risk policies](docs/policies.md): the policy model, confidence ladder, presets and the action catalog.
 
 ## Skills
 
-- [skills/](skills): nine agent skills. `fmeca` is the method reference; `fmeca-concept`, `fmeca-technical-plan`, `fmeca-project-plan`, `fmeca-implementation` and `fmeca-verification` run one analysis level each; `fmeca-resolve`, `fmeca-vet` and `fmeca-signoff` cover resolution, the optional Jev second opinion and sign-off.
+- [skills/](skills): ten agent skills. `fmeca` is the method reference; `fmeca-concept`, `fmeca-technical-plan`, `fmeca-project-plan`, `fmeca-implementation` and `fmeca-verification` run one analysis level each; `fmeca-resolve`, `fmeca-vet`, `fmeca-policy` and `fmeca-signoff` cover resolution, the optional Jev second opinion, reading an analysis under a risk policy, and sign-off.
 - [Levels and links](skills/fmeca/levels.md): which level to analyse, session ids (`<aspect>-<level>`), parents and evidence.
 - [One-shot example](skills/fmeca/examples/one-shot-analyze.json): a complete `analyze` input.
 
