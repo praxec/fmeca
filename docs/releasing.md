@@ -226,28 +226,40 @@ git checkout vX.Y.Z
 cargo publish -p fmeca --dry-run --locked
 cargo package -p fmeca --list --locked   # no docs/superpowers, .github or scripts
 cargo publish -p fmeca --locked
-# Wait for `fmeca X.Y.Z` to appear on crates.io, then:
-# skills/ is copied in as a generated packaging input (gitignored); see build.rs
-rm -rf crates/fmeca-mcp/skills && cp -R skills crates/fmeca-mcp/skills
-# --allow-dirty must only cover the copied skills: stop if anything else shows.
-if git status --porcelain --untracked-files=all | grep -v ' crates/fmeca-mcp/skills/'; then
-  echo "the working tree has other changes; stop before publishing"; false
-fi
-cargo publish -p fmeca-mcp --dry-run --locked --allow-dirty
-cargo publish --locked -p fmeca-mcp --allow-dirty
-rm -rf crates/fmeca-mcp/skills
+```
+
+Wait for `fmeca X.Y.Z` to appear on crates.io, then publish `fmeca-mcp`. Paste
+this block whole: it runs in a subshell that stops at the first failure, so
+nothing is published when the working tree has changes besides the copied
+skills (`--allow-dirty` must cover only those):
+
+```sh
+(
+  set -euo pipefail
+  # skills/ is copied in as a generated packaging input (gitignored); see build.rs
+  rm -rf crates/fmeca-mcp/skills && cp -R skills crates/fmeca-mcp/skills
+  dirty="$(git status --porcelain --untracked-files=all | grep -v ' crates/fmeca-mcp/skills/' || true)"
+  if [ -n "$dirty" ]; then
+    printf '%s\n' "$dirty"
+    echo "the working tree has changes besides crates/fmeca-mcp/skills/; not publishing" >&2
+    exit 1
+  fi
+  cargo publish -p fmeca-mcp --dry-run --locked --allow-dirty
+  cargo publish --locked -p fmeca-mcp --allow-dirty
+  rm -rf crates/fmeca-mcp/skills
+)
 ```
 
 Until this step runs, crates.io keeps serving the previous versions, which is
-why the README installs from the git tag.
+why the README installs from the git tag. docs.rs builds the new versions on
+its own a few minutes after publishing.
 
 After the first release (once `fmeca` 0.1.0 is on crates.io), restore the full
 `fmeca-mcp` publish dry-run in CI: in the `package` job of
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), replace
 `cargo package --locked --list -p fmeca-mcp --allow-dirty` with
 `cargo publish --dry-run --locked -p fmeca-mcp --allow-dirty` and drop the
-comment that explains the workaround. Open it as a pull request into `dev`. docs.rs builds the new versions on
-its own a few minutes after publishing.
+comment that explains the workaround. Open it as a pull request into `dev`.
 
 ## Rollback
 
