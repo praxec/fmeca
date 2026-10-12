@@ -131,6 +131,24 @@ jobs:
             echo "::error::fmeca kernel depends on rig/reqwest"
             exit 1
           fi
+      - name: fmeca kernel does not depend on fmeca-policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree="$(cargo tree --locked -p fmeca -e normal)"
+          if grep -E '\bfmeca-policy\b' <<<"$tree"; then
+            echo "::error::fmeca kernel depends on fmeca-policy"
+            exit 1
+          fi
+      - name: fmeca-policy has no network or clock deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree="$(cargo tree --locked -p fmeca-policy -e normal)"
+          if grep -E '\b(reqwest|rig|tokio|chrono|time) v' <<<"$tree"; then
+            echo "::error::fmeca-policy depends on a network or clock crate"
+            exit 1
+          fi
       - name: server builds without jev
         run: cargo build -p fmeca-mcp --no-default-features --locked
   # Builds the release binary for each frozen release.yml target, so a

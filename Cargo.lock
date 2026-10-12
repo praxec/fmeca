@@ -374,6 +374,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "fmeca-policy"
+version = "0.1.0"
+dependencies = [
+ "fmeca",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
