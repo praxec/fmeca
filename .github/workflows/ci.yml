@@ -49,22 +49,10 @@ jobs:
         env: { RUSTDOCFLAGS: "-D warnings" }
   package:
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.0
-      - run: cargo package --locked --list -p fmeca
-      - run: cargo publish --dry-run --locked -p fmeca
-      # Like fmeca-mcp, fmeca-policy depends on the not-yet-published `fmeca`
-      # kernel, so verify its packaging with `package --list` rather than a
-      # `publish --dry-run` (docs/releasing.md, step 7).
-      - run: cargo package --locked --list -p fmeca-policy
-      # `fmeca` 0.1.0 is not on crates.io yet, so a `fmeca-mcp` publish
-      # dry-run cannot resolve it (cargo 1.99 resolves during packaging even
-      # with `--no-verify`). Until then, verify fmeca-mcp packaging with
-      # `package --list`; once `fmeca` 0.1.0 is published, restore
-      # `cargo publish --dry-run --locked -p fmeca-mcp --allow-dirty` here
-      # (docs/releasing.md, step 7).
       # build.rs embeds $CARGO_MANIFEST_DIR/skills when present, and the packaged
       # crate cannot reach ../../skills, so copy the workspace skills in first
       # (the copy is gitignored).
@@ -83,8 +71,19 @@ jobs:
             echo "::error::the working tree has changes besides crates/fmeca-mcp/skills/"
             exit 1
           fi
-      # skills/ is copied in as a generated packaging input (gitignored); see build.rs
-      - run: cargo package --locked --list -p fmeca-mcp --allow-dirty
+      - name: no repo-only paths in the fmeca package
+        shell: bash
+        run: |
+          set -euo pipefail
+          if cargo package --locked --list -p fmeca | grep -E '^(docs/superpowers|\.github|scripts)/'; then
+            echo "::error::repo-only files in the fmeca package"
+            exit 1
+          fi
+      # Packages and verifies all three crates together, in publish order
+      # (fmeca -> fmeca-policy -> fmeca-mcp). A workspace publish dry-run builds
+      # each crate against its packaged siblings, so it passes even while a
+      # version bump on dev is not yet on crates.io (docs/releasing.md, step 7).
+      - run: cargo publish --workspace --dry-run --locked --allow-dirty
   # Builds the Dockerfile the release image job uses, so a broken image build
   # fails a PR rather than a release. amd64 only; nothing is pushed.
   docker:

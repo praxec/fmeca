@@ -230,12 +230,10 @@ Until this step runs, crates.io keeps serving the previous versions, which is
 why the README installs from the git tag. docs.rs builds the new versions on
 its own a few minutes after publishing.
 
-After the first release (once `fmeca` 0.1.0 is on crates.io), restore the full
-`fmeca-mcp` publish dry-run in CI: in the `package` job of
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml), replace
-`cargo package --locked --list -p fmeca-mcp --allow-dirty` with
-`cargo publish --dry-run --locked -p fmeca-mcp --allow-dirty` and drop the
-comment that explains the workaround. Open it as a pull request into `dev`.
+CI checks this step on every pull request: the `package` job runs
+`cargo publish --workspace --dry-run --locked --allow-dirty` (with the skills
+copied in), which packages and verifies all three crates against each other in
+publish order, so it passes even before a version bump reaches crates.io.
 
 ## Rollback
 
