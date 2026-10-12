@@ -79,7 +79,8 @@ Acceptance keeps a residual risk on purpose. It is a human decision:
  "approver": "Dana Smith (head of payments)"}
 ```
 
-An accepted failure mode stops blocking both gates and is listed in `accepted_risks`.
+In the kernel, an accepted failure mode stops blocking both gates and is listed in
+`accepted_risks`. A risk policy is stricter: see section 4.
 
 ## 3. Exclude a failure mode that is not credible
 
@@ -106,7 +107,13 @@ them to decide what to raise with the user: a failure mode suggested `accept` st
 named approver, and an overdue acceptance needs a fresh decision. A `fallback` means the
 mitigation's evidence is too weak for the band: add the test or inspection evidence (section
 1), do not accept to make it go away. Acceptance, exclusion and status stay with the human.
-See [fmeca-policy](../fmeca-policy/SKILL.md).
+
+**Acceptance is band-gated under a policy.** It counts as a pass only when the effective
+band's `dispositions` include `accept`; otherwise policy sign-off fails with "accepted in
+band ... which does not allow acceptance". The same rule decides whether a required
+`eliminate` or `procedure` action is covered (`covered_by: ["acceptance"]`), and it also
+needs a non-empty rationale. Check the band before you ask for an approver. See
+[fmeca-policy](../fmeca-policy/SKILL.md) and [docs/policies.md](../../docs/policies.md).
 
 ## 5. Report
 

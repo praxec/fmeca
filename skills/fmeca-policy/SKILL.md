@@ -52,14 +52,21 @@ Read the result:
   for the residual. It only ever raises the band. The cure is evidence, not a rescore:
   move the mitigation with [fmeca-resolve](../fmeca-resolve/SKILL.md) and cite the test or
   inspection.
-- `status` is `unscored`, `open` or `accepted`, with a `suggested` disposition
-  (`accept`, `mitigate`, `watch`, `research`, `close`, `elevate`). It is a suggestion; the
-  human decides.
+- `status.state` is `unscored`, `open` or `accepted`. Unscored and open carry a `suggested`
+  disposition (`accept`, `mitigate`, `watch`, `research`, `close`, `elevate`); it is a
+  suggestion and the human decides. Accepted carries the `approver`, `review_due` and the
+  acceptance and concurrence roles. An **unscored** failure mode fails policy sign-off.
 - `actions` come with `tags`, `precedence` (eliminate, prevent, detect, contain,
   procedure), `required` and `covered_by`. A required action nothing covers is listed in
   `rollups.required_uncovered` and fails sign-off.
-- `signoff.pass` and `signoff.reasons`. Show them beside, never instead of, the kernel
-  gates in `readiness.assess`.
+- `signoff.pass` and `signoff.reasons`: the policy verdict, not the kernel gate. Show them
+  beside, never instead of, `readiness.assess`. Kernel blockers appear in the reasons as
+  `kernel: ...` (every preset sets `include_kernel_gate`).
+- Acceptance is band-gated: it counts as a pass only when the effective band's
+  `dispositions` include `accept`; otherwise sign-off fails with "accepted in band ...
+  which does not allow acceptance". The same rule covers a required `eliminate` or
+  `procedure` action (`covered_by: ["acceptance"]`, with a non-empty rationale). See
+  [docs/policies.md](../../docs/policies.md).
 - `excluded` failure modes are out of scope; `rollups.review_overdue` lists acceptances
   past their review date.
 

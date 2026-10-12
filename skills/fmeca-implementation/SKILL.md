@@ -86,8 +86,8 @@ Evidence that verifies them (see [fmeca-resolve](../fmeca-resolve/SKILL.md)):
 - the `test` that proves it, basis `test`: `verified` when it passes in CI. A review of the
   guard without a test is basis `inspection`.
 
-To propose concrete work, call `actions.suggest` with `actions.suggest.group_by` `tag`
-(see [fmeca-policy](../fmeca-policy/SKILL.md)); it only suggests.
+To propose concrete work, call `actions.suggest` with `group_by: "tag"` (see
+[fmeca-policy](../fmeca-policy/SKILL.md)); it only suggests.
 
 ## 6. Hand-off to the next level
 

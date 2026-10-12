@@ -18,8 +18,9 @@ and `conops`), [fmeca-technical-plan](../fmeca-technical-plan/SKILL.md),
 [fmeca-implementation](../fmeca-implementation/SKILL.md) and
 [fmeca-verification](../fmeca-verification/SKILL.md). Then come
 [fmeca-resolve](../fmeca-resolve/SKILL.md), [fmeca-vet](../fmeca-vet/SKILL.md),
-[fmeca-policy](../fmeca-policy/SKILL.md) and [fmeca-signoff](../fmeca-signoff/SKILL.md). What each level reads and the link rules are in
-[levels.md](levels.md). A one-shot input: [examples/one-shot-analyze.json](examples/one-shot-analyze.json).
+[fmeca-policy](../fmeca-policy/SKILL.md) and
+[fmeca-signoff](../fmeca-signoff/SKILL.md). What each level reads and the link rules are
+in [levels.md](levels.md). A one-shot input: [examples/one-shot-analyze.json](examples/one-shot-analyze.json).
 
 ## 1. The project store
 

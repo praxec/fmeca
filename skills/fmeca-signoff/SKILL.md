@@ -38,7 +38,10 @@ shows `ready` and `ready_verified` for every level at once.
 If the project has a risk policy (a `.fmeca/policies/` folder, or the user names a preset),
 run `actions.suggest {"session_id": "<id>", "policy": "<name>"}` and show its `signoff.pass`,
 `signoff.reasons` and `rollups.required_uncovered` **beside** the kernel gates, never instead
-of them. It is read-only. Name the policy and its hash. See
+of them. `signoff.pass` is the policy verdict, not the kernel gate: with
+`include_kernel_gate` (true in every preset) kernel blockers appear in the reasons as
+`kernel: ...`. Report both, and never present the policy pass as the gate. Unscored failure
+modes fail policy sign-off. It is read-only. Name the policy and its hash. See
 [fmeca-policy](../fmeca-policy/SKILL.md). Without a policy, skip this.
 
 ## 2. Export
