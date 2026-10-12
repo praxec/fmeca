@@ -60,7 +60,6 @@ required-features = ["jev"]
 
 [dev-dependencies]
 tempfile = "3"
-toml = "1"
 wiremock = "0.6"
 async-trait = "0.1"
 toml = "1"
