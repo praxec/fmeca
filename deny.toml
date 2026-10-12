@@ -20,6 +20,8 @@ allow = [
     "MIT",
     "Unicode-3.0",
     "Unlicense",
+    # Zlib: foldhash (via serde_json >= 1.0.154).
+    "Zlib",
 ]
 
 [bans]
