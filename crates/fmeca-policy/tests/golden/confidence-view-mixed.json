@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "confidence-view",
-    "hash": "30027bb291a264929f4a3052f84ae42af9748f5061caebd8232298aa0aa78cb9",
+    "hash": "eb0931d2a8fca46169c88be97218f1768d095a59c9ba8da5da7d45a0e27f0661",
     "class": "confidence-view",
     "matrix_derived_from": "standard-bands",
     "source": "preset"
@@ -312,7 +312,8 @@
   "signoff": {
     "pass": false,
     "reasons": [
-      "fm-unscored: unscored"
+      "fm-unscored: unscored",
+      "kernel: CLARIFY: failure mode 'fm-unscored' is missing cause/effect/score"
     ]
   }
 }

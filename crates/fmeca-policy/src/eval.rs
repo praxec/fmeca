@@ -10,8 +10,9 @@
 //!
 //! 1. **Inherent band**: the policy matrix cell for the unmitigated
 //!    `(severity, probability)` ordinals (`cells[s - 1][p - 1]`). Unscored
-//!    failure modes have no band, are C0, and fail sign-off (`<fm>:
-//!    unscored`) whatever `include_kernel_gate` says.
+//!    failure modes have no band, are C0, and — when `unscored_fails` (the
+//!    default) — fail sign-off (`<fm>: unscored`) whatever
+//!    `include_kernel_gate` says.
 //! 2. **Residual band**: the cell for [`SubjectFm::residual`] (the kernel's
 //!    best residual over the active mitigations). With no residual, the
 //!    kernel's rule applies and the residual is the inherent band.
@@ -508,7 +509,7 @@ pub(crate) fn evaluate_with(
             }
         };
         *rollups.by_status.entry(status_key.to_string()).or_default() += 1;
-        if fm.inherent.is_none() {
+        if fm.inherent.is_none() && policy.signoff.unscored_fails {
             reasons.push(format!("{}: unscored", fm.id));
         }
         if let Some(effective) = banded.effective

@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "safety-critical",
-    "hash": "32265c1bbb2675666e6bcec4c7c7c0fcf66198db4cca2ae8dfee8143fb662f5c",
+    "hash": "3a9d2deb73cb66b5335f50a2704d83f8d61613c689e60eca2c20e03bb5391275",
     "class": "safety-critical",
     "matrix_derived_from": "nasa8004_5x5",
     "source": "preset"
@@ -581,7 +581,8 @@
       "fm-claimed: effective band `high` ranks above max_residual_band `medium`",
       "fm-claimed: required action `design-review` is not covered",
       "fm-claimed: required action `test-and-inspection-evidence` is not covered",
-      "fm-unscored: unscored"
+      "fm-unscored: unscored",
+      "kernel: CLARIFY: failure mode 'fm-unscored' is missing cause/effect/score"
     ]
   }
 }

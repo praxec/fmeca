@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "business-critical",
-    "hash": "1efe3caf5c8f33eea159ecfef99326a58df8149e5ab5e402a29c709b07af6d95",
+    "hash": "b7935023618e4565aad8f8ab8fd04f564d093ad0ffb179402164c2ebd2cf6a53",
     "class": "business-critical",
     "matrix_derived_from": "qualitative3x3",
     "source": "preset"

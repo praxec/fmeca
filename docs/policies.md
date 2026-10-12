@@ -43,7 +43,13 @@ A policy has:
   policy's own `max_residual_band`, so an unmitigated failure mode in
   `standard`'s `compensate` band passes even though the kernel calls it
   Medium. (The kernel reports blockers as strings; the stable `RESIDUAL:`
-  prefix is the rule that leaves them out.)
+  prefix is the rule that leaves them out.) Finally, whether an unscored
+  failure mode fails sign-off on its own as `<fm>: unscored`
+  (`unscored_fails`, default `true`). With `unscored_fails = false` that
+  reason is not emitted: an **open** unscored failure mode still fails through
+  the kernel gate's `CLARIFY` blocker, and an **accepted** unscored one
+  passes, exactly as 0.1 `readiness.assess` does. Only `compat-0.1` sets it to
+  `false`.
 - **`actions`** — optional policy-specific actions, plus the shared built-in
   catalog when `include_builtin_actions = true`.
 
@@ -88,8 +94,9 @@ must be locatable.
 | C3 | Tested | basis `test`, or kind `test` |
 | C4 | Proven in use | basis `operational_use` or `failure_history` |
 
-A failure mode with no mitigations is C0. An unscored failure mode is C0 and
-fails sign-off as `unscored`.
+A failure mode with no mitigations is C0. An unscored failure mode is C0 and,
+under `unscored_fails` (every preset but `compat-0.1`), fails sign-off as
+`unscored`.
 
 ## Fallback rule (MIL-STD-882E Table VI)
 
@@ -149,7 +156,9 @@ mitigate mitigate mitigate mitigate mitigate
 mitigate mitigate mitigate mitigate mitigate
 ```
 
-`signoff.max_residual_band = "none"`, `accepted_counts_as_pass = true`.
+`signoff.max_residual_band = "none"`, `accepted_counts_as_pass = true`,
+`unscored_fails = false` (0.1 readiness fails an unscored failure mode only
+while it is open, through `CLARIFY`; an accepted unscored one passes).
 
 ### prototype
 

@@ -57,7 +57,9 @@ Read the result:
 - `status.state` is `unscored`, `open` or `accepted`. Unscored and open carry a `suggested`
   disposition (`accept`, `mitigate`, `watch`, `research`, `close`, `elevate`); it is a
   suggestion and the human decides. Accepted carries the `approver`, `review_due` and the
-  acceptance and concurrence roles. An **unscored** failure mode fails policy sign-off.
+  acceptance and concurrence roles. An **unscored** failure mode fails policy sign-off (under
+  `compat-0.1`, which sets `unscored_fails = false`, only while open, through the kernel's
+  CLARIFY blocker).
 - `actions` come with `tags`, `precedence` (eliminate, prevent, detect, contain,
   procedure), `required` and `covered_by`. A required action nothing covers is listed in
   `rollups.required_uncovered` and fails sign-off.

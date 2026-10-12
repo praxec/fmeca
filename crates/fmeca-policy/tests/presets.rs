@@ -511,7 +511,10 @@ fn parity_fixtures() -> Vec<ParityFixture> {
                 LOW_3,
             )],
         ),
-        ParityFixture::new("3x3-unscored", Q3, vec![unscored]),
+        ParityFixture::new("3x3-unscored", Q3, vec![unscored.clone()]),
+        // Accepted but unscored: 0.1 readiness raises no CLARIFY (not open).
+        ParityFixture::new("3x3-accepted-unscored", Q3, vec![unscored])
+            .with("fm-unscored", Disposition::Accepted),
         ParityFixture::new("3x3-empty", Q3, Vec::new()),
         ParityFixture::new("5x5-low", N5, vec![afm("fm-low", LOW_5.0, LOW_5.1)]),
         ParityFixture::new(
@@ -620,6 +623,33 @@ fn compat_preset_matches_readiness_on_all_fixtures() {
         }
     }
     assert!(mismatches.is_empty(), "{mismatches:#?}");
+}
+
+/// I1: an accepted, unscored failure mode is ready under 0.1 readiness, and
+/// `compat-0.1` (`unscored_fails = false`) passes it too.
+#[test]
+fn compat_passes_accepted_unscored_session_that_readiness_passes() {
+    let fixture = parity_fixtures()
+        .into_iter()
+        .find(|f| f.name == "3x3-accepted-unscored")
+        .expect("fixture");
+    let state = fixture.session();
+    let compat = preset("compat-0.1").expect("compat preset");
+    let pass = evaluate(&subject_from_state(&state), &compat, as_of())
+        .unwrap()
+        .signoff
+        .pass;
+    assert_eq!((state.readiness.ready, pass), (true, true));
+}
+
+#[test]
+fn only_compat_turns_off_unscored_fails() {
+    let off: Vec<&str> = PRESET_NAMES
+        .iter()
+        .copied()
+        .filter(|name| preset(name).is_some_and(|lp| !lp.policy.signoff.unscored_fails))
+        .collect();
+    assert_eq!(off, vec!["compat-0.1"]);
 }
 
 /// With the kernel gate switched off, compat-0.1's band rule alone must equal
@@ -1213,11 +1243,17 @@ fn golden_mixed() -> Subject {
         (1, 1),
         vec![evidence(fmeca::EvidenceKind::Commit, None)],
     ));
-    subject(
+    let mut mixed = subject(
         MatrixStrategy::Nasa8004_5x5,
         None,
         vec![accepted, claimed, excluded, unscored],
-    )
+    );
+    // The kernel's own verdict on an open unscored failure mode.
+    mixed.kernel_gate = KernelGate {
+        ready: false,
+        blockers: vec!["CLARIFY: failure mode 'fm-unscored' is missing cause/effect/score".into()],
+    };
+    mixed
 }
 
 /// A real session through the engine, so its kernel gate is the kernel's own
@@ -1246,7 +1282,8 @@ fn golden_session() -> Subject {
     subject_from_state(&fixture.session())
 }
 
-/// Every golden fixture. `session` carries a real kernel gate; the others
+/// Every golden fixture. `session` carries a real kernel gate; `mixed` stubs
+/// the kernel's CLARIFY blocker for its open unscored failure mode; the others
 /// stub a ready, empty one.
 fn golden_fixtures() -> [(&'static str, Subject); 4] {
     [

@@ -130,6 +130,14 @@ pub struct Signoff {
     /// (see [`KernelGate`](crate::KernelGate)).
     #[serde(default = "yes")]
     pub include_kernel_gate: bool,
+    /// When true (the default), every unscored failure mode that is not
+    /// excluded fails sign-off as `<fm>: unscored`, open or accepted. When
+    /// false, that reason is not emitted: an open unscored failure mode still
+    /// fails through the kernel gate's CLARIFY blocker (with
+    /// `include_kernel_gate`), and an accepted one passes, as in fmeca 0.1's
+    /// `readiness.assess` (`compat-0.1` sets it to false).
+    #[serde(default = "yes")]
+    pub unscored_fails: bool,
 }
 
 /// Conditions on a failure mode; every condition present must hold. An empty

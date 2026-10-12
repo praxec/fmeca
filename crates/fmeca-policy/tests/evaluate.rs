@@ -773,6 +773,40 @@ fn unscored_fails_signoff_without_kernel_gate() {
 }
 
 #[test]
+fn unscored_reason_omitted_when_unscored_fails_is_false() {
+    let policy = policy_from(&TEST_POLICY.replace(
+        "max_residual_band = \"act\"",
+        "max_residual_band = \"act\"\ninclude_kernel_gate = false\nunscored_fails = false",
+    ));
+    let s = evaluate(&subject(vec![unscored("fm1")]), &policy, as_of()).unwrap();
+    assert!(s.signoff.pass, "{:?}", s.signoff.reasons);
+}
+
+#[test]
+fn open_unscored_still_fails_through_kernel_clarify_when_unscored_fails_is_false() {
+    let policy = policy_from(&TEST_POLICY.replace(
+        "max_residual_band = \"act\"",
+        "max_residual_band = \"act\"\nunscored_fails = false",
+    ));
+    let input: Vec<fmeca::AnalyzeInput> = serde_json::from_str(
+        r#"[{"id":"fm1","component":{"id":"c1"},"description":"d","domain":"runtime"}]"#,
+    )
+    .unwrap();
+    let subject =
+        fmeca_policy::subject_from_analysis(MatrixStrategy::Qualitative3x3, &input).unwrap();
+    let s = evaluate(&subject, &policy, as_of()).unwrap();
+    assert!(
+        s.signoff
+            .reasons
+            .iter()
+            .all(|r| r.starts_with("kernel: CLARIFY"))
+            && !s.signoff.pass,
+        "{:?}",
+        s.signoff.reasons
+    );
+}
+
+#[test]
 fn parse_date_rejects_trailing_junk() {
     assert!(matches!(
         parse_date("2026-10-12Tjunk"),

@@ -45,3 +45,6 @@ max_residual_band = "none"
 accepted_counts_as_pass = true
 accepted_requires_review_current = false
 include_kernel_gate = true
+# 0.1 readiness raises CLARIFY only for an *open* unscored failure mode (via
+# the kernel gate above); an accepted unscored one passes.
+unscored_fails = false

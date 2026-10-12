@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "prototype",
-    "hash": "ef4b146c21b18941dee3ec0713107ee6145f9fca6a886342b7dd74ec46bdf650",
+    "hash": "c484324044631012c49e90a86e01c8c26bc29f770e2320bbad4e60008ef76554",
     "class": "prototype",
     "matrix_derived_from": "nasa8004_5x5",
     "source": "preset"
@@ -310,7 +310,8 @@
   "signoff": {
     "pass": false,
     "reasons": [
-      "fm-unscored: unscored"
+      "fm-unscored: unscored",
+      "kernel: CLARIFY: failure mode 'fm-unscored' is missing cause/effect/score"
     ]
   }
 }

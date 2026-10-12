@@ -1,7 +1,7 @@
 {
   "policy": {
     "name": "standard",
-    "hash": "0b661c8483ccd4ce55cee0e480e0817ccbac3e1c408b7b3c42c46ae308a25208",
+    "hash": "a4b81cd0e593360d0049d2b76bc2abf2aaec374ca34bb345d2d4982a3f15e600",
     "class": "standard",
     "matrix_derived_from": "nasa8004_5x5",
     "source": "preset"
@@ -301,7 +301,8 @@
     "pass": false,
     "reasons": [
       "fm-acc: accepted risk in band `review` is overdue for review",
-      "fm-unscored: unscored"
+      "fm-unscored: unscored",
+      "kernel: CLARIFY: failure mode 'fm-unscored' is missing cause/effect/score"
     ]
   }
 }
