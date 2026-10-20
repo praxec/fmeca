@@ -5,6 +5,9 @@ description: "Use when an fmeca analysis would benefit from a second opinion bef
 
 # fmeca-vet: a calibrated second opinion
 
+Calling the tools: see [Calling the tools](../fmeca/SKILL.md#calling-the-tools)
+(registered MCP server or a host wrapper such as `junior tools call`).
+
 `vet` asks Jev, a calibrated judgment model, about an analysis and returns probabilities
 beside the deterministic gate. It never writes and never changes a score, an observation
 or a gate: anything that changes goes through `append`, after you have checked the evidence.

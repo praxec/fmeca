@@ -5,6 +5,9 @@ description: "Use when an fmeca analysis needs to be read under a project's own 
 
 # fmeca-policy: read an analysis under a risk policy
 
+Calling the tools: see [Calling the tools](../fmeca/SKILL.md#calling-the-tools)
+(registered MCP server or a host wrapper such as `junior tools call`).
+
 A **risk policy** re-colours an analysis into the project's own bands, sets a sign-off rule
 and suggests tagged actions. It is applied at query time and never written to the log, so
 one analysis can be read under several policies. The method is in

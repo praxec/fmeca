@@ -5,6 +5,9 @@ description: Use when code needs a failure analysis, before or after it is writt
 
 # fmeca-implementation: what can fail in the code
 
+Calling the tools: see [Calling the tools](../fmeca/SKILL.md#calling-the-tools)
+(registered MCP server or a host wrapper such as `junior tools call`).
+
 Analyse a diff, a module or a pull request at the `implementation` level: where the code can
 fail, what that does to the design above it, and which guard or test stops it. The method and
 the core loop are in [the fmeca reference](../fmeca/SKILL.md); level conventions are in
