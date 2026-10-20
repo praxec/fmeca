@@ -5,6 +5,9 @@ description: Use when a product idea, feature brief or business change needs a r
 
 # fmeca-concept: the idea, then how the business runs it
 
+Calling the tools: see [Calling the tools](../fmeca/SKILL.md#calling-the-tools)
+(registered MCP server or a host wrapper such as `junior tools call`).
+
 Analyse the thing before it is designed: first whether it is worth building and whom it can
 hurt (`concept`), then how the business will operate it (`conops`). The method, the
 observation rules and the core loop are in [the fmeca reference](../fmeca/SKILL.md); level

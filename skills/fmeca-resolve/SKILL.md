@@ -5,6 +5,9 @@ description: "Use when a mitigation in an fmeca analysis has been built, proven 
 
 # fmeca-resolve: from planned to proven
 
+Calling the tools: see [Calling the tools](../fmeca/SKILL.md#calling-the-tools)
+(registered MCP server or a host wrapper such as `junior tools call`).
+
 An analysis says what *should* be done. Resolution records what *was* done and how we know.
 The lifecycle and the evidence rules are in [the fmeca reference](../fmeca/SKILL.md) and
 [levels.md](../fmeca/levels.md). If this skill and the server disagree, the server wins.
