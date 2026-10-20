@@ -24,20 +24,7 @@ in [levels.md](levels.md). A one-shot input: [examples/one-shot-analyze.json](ex
 
 ## Calling the tools
 
-The tools are the same whichever way you reach them; the method names and
-arguments in this skill do not change.
-
-- **Registered MCP server.** When `fmeca-mcp` is registered with your agent
-  host, call the tools directly (`risk.next` with its arguments).
-- **Through a host wrapper.** When the server is not registered, a wrapper can
-  spawn the binary per call. With Junior, `junior tools call fmeca risk.next
-  session_id=<id>` takes inline arguments (values parse as JSON),
-  `echo '{"tool":"risk.next","arguments":{...}}' | junior tools call fmeca -`
-  reads the request from stdin, and `junior tools call fmeca request.json`
-  reads it from a file. Each call prints the bare result.
-
-Do not register a server just to follow this skill; use whichever route your
-host already has.
+Same methods and arguments either way: a registered `fmeca-mcp` MCP server, or a host wrapper such as `junior tools call fmeca risk.next session_id=<id>` (inline `key=value` values parse as JSON; `-` reads the request from stdin; or pass a request file). Do not register a server just to follow this skill.
 
 ## 1. The project store
 
