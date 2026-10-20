@@ -5,6 +5,9 @@ description: "Use when a delivery plan needs a failure analysis: the deliverable
 
 # fmeca-project-plan: how the work will be delivered
 
+Calling the tools: see [Calling the tools](../fmeca/SKILL.md#calling-the-tools)
+(registered MCP server or a host wrapper such as `junior tools call`).
+
 Analyse the plan, not the product, at the `project_plan` level: which deliverables can slip,
 collide or start without what they need. The method and the core loop are in [the fmeca
 reference](../fmeca/SKILL.md); level conventions are in [levels.md](../fmeca/levels.md). If

@@ -5,6 +5,9 @@ description: "Use when an fmeca analysis is finished and someone needs a sign-of
 
 # fmeca-signoff: the gate and the summary
 
+Calling the tools: see [Calling the tools](../fmeca/SKILL.md#calling-the-tools)
+(registered MCP server or a host wrapper such as `junior tools call`).
+
 Sign-off turns an analysis into a decision a human can make. You assemble the facts; the
 user signs. The gates are defined in [the fmeca reference](../fmeca/SKILL.md). If this
 skill and the server disagree, the server wins.

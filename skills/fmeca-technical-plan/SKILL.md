@@ -5,6 +5,9 @@ description: Use when a design doc, architecture, interface contract or dependen
 
 # fmeca-technical-plan: how the technology will be used
 
+Calling the tools: see [Calling the tools](../fmeca/SKILL.md#calling-the-tools)
+(registered MCP server or a host wrapper such as `junior tools call`).
+
 Analyse the design before the code, at the `technical_plan` level: the components, the
 interfaces between them, the data they hold and the services they depend on. The method and
 the core loop are in [the fmeca reference](../fmeca/SKILL.md); level conventions are in

@@ -5,6 +5,9 @@ description: Use when a change is about to ship or has shipped and the question 
 
 # fmeca-verification: what did we prove
 
+Calling the tools: see [Calling the tools](../fmeca/SKILL.md#calling-the-tools)
+(registered MCP server or a host wrapper such as `junior tools call`).
+
 Analyse the evidence, not the intent, at the `verification` level: which failure paths are
 tested, how the change rolls out and back, and whether anyone would notice it failing in
 production. The method and the core loop are in [the fmeca reference](../fmeca/SKILL.md);

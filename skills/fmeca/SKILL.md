@@ -1,6 +1,6 @@
 ---
 name: fmeca
-description: "Use when you need the method reference behind the fmeca-* skills, or when no narrower fmeca skill fits a task that uses the fmeca-mcp tools (session.open, session.list, append, state.get, risk.next, readiness.assess, report.export, scoring.catalog, analyze, vet, actions.suggest, policy.list). Covers what an FMECA is, observations instead of scores, the 3x3 and NASA 5x5 matrices, the prevention, detection, fail_fast order, residual risk and standing, the ready and verified.ready gates, the .fmeca/ project store and its <aspect>-<level> session ids, parent links and refs between analyses, and the core loop that every level skill runs."
+description: "Use when a feature, design, plan or change needs a failure-mode risk analysis and you need the method reference behind the fmeca-* skills, or when no narrower fmeca skill fits a task that uses the fmeca-mcp tools (session.open, session.list, append, state.get, risk.next, readiness.assess, report.export, scoring.catalog, analyze, vet, actions.suggest, policy.list). Covers what an FMECA is, observations instead of scores, the 3x3 and NASA 5x5 matrices, the prevention, detection, fail_fast order, residual risk and standing, the ready and verified.ready gates, the .fmeca/ project store and its <aspect>-<level> session ids, parent links and refs between analyses, and the core loop that every level skill runs."
 ---
 
 # FMECA with fmeca-mcp
@@ -21,6 +21,10 @@ and `conops`), [fmeca-technical-plan](../fmeca-technical-plan/SKILL.md),
 [fmeca-policy](../fmeca-policy/SKILL.md) and
 [fmeca-signoff](../fmeca-signoff/SKILL.md). What each level reads and the link rules are
 in [levels.md](levels.md). A one-shot input: [examples/one-shot-analyze.json](examples/one-shot-analyze.json).
+
+## Calling the tools
+
+Same methods and arguments either way: a registered `fmeca-mcp` MCP server, or a host wrapper such as `junior tools call fmeca risk.next session_id=<id>` (inline `key=value` values parse as JSON; `-` reads the request from stdin; or pass a request file). Do not register a server just to follow this skill.
 
 ## 1. The project store
 
