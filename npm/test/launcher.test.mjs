@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { BIN_JS, PKG_VERSION, launcher, releaseFiles, startServer, tempDir, insecureEnv } from './helpers.mjs';
+import { BIN_JS, PKG, PKG_VERSION, launcher, packageBin, releaseFiles, startServer, tempDir, insecureEnv } from './helpers.mjs';
 
 const POSIX = process.platform !== 'win32';
 
@@ -26,6 +26,18 @@ function cleanEnv(extra) {
 function runLauncher(args, env) {
   return spawnSync(process.execPath, [BIN_JS, ...args], { encoding: 'utf8', timeout: 30000, env: cleanEnv(env) });
 }
+
+test('the fmeca and fmeca-mcp bin entries point at the same launcher', () => {
+  assert.equal(PKG.bin.fmeca, PKG.bin['fmeca-mcp']);
+});
+
+test('running the fmeca alias with --version reports the server version', (t) => {
+  const script = fakeServer(t, "process.stdout.write('fmeca 0.2.1\\n');\n");
+  const res = spawnSync(process.execPath, [packageBin('fmeca'), script, '--version'], {
+    encoding: 'utf8', env: cleanEnv({ FMECA_MCP_BINARY: process.execPath }),
+  });
+  assert.equal(res.stdout, 'fmeca 0.2.1\n');
+});
 
 test('FMECA_MCP_BINARY runs the local binary without contacting any download host', (t) => {
   const script = fakeServer(t, 'process.exit(0);\n');

@@ -1,6 +1,6 @@
 {
   "name": "@matthew-cochran/fmeca",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "npx launcher for the fmeca MCP server: downloads the verified release binary for your platform and runs it over stdio.",
   "keywords": [
     "mcp",
@@ -22,6 +22,7 @@
     "url": "https://github.com/praxec/fmeca/issues"
   },
   "bin": {
+    "fmeca": "bin/fmeca-mcp.js",
     "fmeca-mcp": "bin/fmeca-mcp.js"
   },
   "files": [
