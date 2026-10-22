@@ -22,6 +22,7 @@
     "url": "https://github.com/praxec/fmeca/issues"
   },
   "bin": {
+    "fmeca": "bin/fmeca-mcp.js",
     "fmeca-mcp": "bin/fmeca-mcp.js"
   },
   "files": [
