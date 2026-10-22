@@ -19,7 +19,7 @@ name = "fmeca_policy"
 path = "src/lib.rs"
 
 [dependencies]
-fmeca = { path = "../fmeca", version = "0.2.1" }
+fmeca = { path = "../fmeca", version = "0.2.2" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10"

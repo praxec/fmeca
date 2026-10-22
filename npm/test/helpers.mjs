@@ -17,8 +17,14 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 export const launcher = require('../lib/install.js');
-export const PKG_VERSION = require('../package.json').version;
+export const PKG = require('../package.json');
+export const PKG_VERSION = PKG.version;
 export const BIN_JS = path.join(HERE, '..', 'bin', 'fmeca-mcp.js');
+
+// Resolves a package `bin` entry the way npm does when it links the command.
+export function packageBin(name) {
+  return path.join(HERE, '..', PKG.bin[name]);
+}
 export const POSTINSTALL_JS = path.join(HERE, '..', 'lib', 'postinstall.js');
 export const INSTALL_JS = path.join(HERE, '..', 'lib', 'install.js');
 

@@ -50,8 +50,9 @@ npx -y @matthew-cochran/fmeca
 ```
 
 The [npm launcher](npm/README.md) downloads the matching release binary,
-verifies its checksum, caches it and runs it. Point your MCP client at that
-command (see [MCP client config](#mcp-client-config)).
+verifies its checksum, caches it and runs it. The package installs two command
+aliases, `fmeca` and `fmeca-mcp`, both running the same launcher. Point your
+MCP client at either command (see [MCP client config](#mcp-client-config)).
 
 ### Prebuilt binary (no Rust, Cargo, or Git required)
 
@@ -147,7 +148,8 @@ any other MCP server. The same entry works in Claude Code (`.mcp.json`) and Copi
 }
 ```
 
-Use `"command": "fmeca-mcp"` with `"args": []` for the binary. Codex uses TOML:
+Use `"command": "fmeca-mcp"` (or its alias `"command": "fmeca"`) with
+`"args": []` for the binary. Codex uses TOML:
 
 ```toml
 [mcp_servers.fmeca]
