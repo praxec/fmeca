@@ -17,7 +17,7 @@ updates:
     open-pull-requests-limit: 5
     ignore:
       # The ref of dtolnay/rust-toolchain is the Rust version itself. It is pinned
-      # to rust-toolchain.toml (1.99.0) and bumped by hand together with it.
+      # to rust-toolchain.toml (1.99.1) and bumped by hand together with it.
       - dependency-name: dtolnay/rust-toolchain
     groups:
       actions-minor-patch: { update-types: [minor, patch] }

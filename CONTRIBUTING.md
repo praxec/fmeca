@@ -11,7 +11,7 @@ questions about contributing, see [SUPPORT.md](SUPPORT.md).
 ## Toolchain
 
 - The pinned toolchain in [`rust-toolchain.toml`](rust-toolchain.toml) is
-  **1.99.0** (with `rustfmt` and `clippy`). `rustup` installs it automatically
+  **1.99.1** (with `rustfmt` and `clippy`). `rustup` installs it automatically
   when you run Cargo in the repository.
 - The **MSRV** (minimum supported Rust version) is **1.85** for the `fmeca`
   kernel, recorded as `rust-version` in the workspace manifest; `fmeca-mcp`
