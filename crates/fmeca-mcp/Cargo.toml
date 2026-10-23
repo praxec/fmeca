@@ -48,7 +48,7 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls-no-p
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"], optional = true }
 async-trait = { version = "0.1", optional = true }
 # sha256: `vet` question hashes and skills-install manifest digests / lock names.
-sha2 = "0.10"
+sha2 = "0.11"
 # The RFC 3339 `at` stamp on resolution changes (the kernel never reads a clock).
 time = { version = "0.3", features = ["formatting"] }
 
